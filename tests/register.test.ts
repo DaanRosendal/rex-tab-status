@@ -83,6 +83,10 @@ test('an interrupt and an error each show', async ($, on) => {
   await $.turn.start({ text: 'again', turnId: 't2' })
   await $.turn.complete({ ...done('t2'), reason: 'error' })
   expect(rex.label).toBe('❌ Fix login redirect')
+
+  await $.turn.start({ text: 'once more', turnId: 't3' })
+  await $.turn.complete({ ...done('t3'), reason: 'refusal', refusal: { category: null, explanation: null } })
+  expect(rex.label).toBe('❌ Fix login redirect')
 })
 
 test('a question to the person shows while it is open', async ($, on) => {
@@ -130,4 +134,14 @@ test('outside Rex nothing is renamed', async ($, on) => {
   await $.session.start(START)
   await $.turn.start({ text: 'go', turnId: 't1' })
   expect(rex.label).toBe('Window 0000beef')
+})
+
+test('a non-interactive run in the same pane leaves the tab alone', async ($, on) => {
+  const rex = fakeRex(on, '✅ Parent session')
+
+  await $.session.start({ ...START, isInteractive: false })
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await $.turn.complete(done('t1'))
+  await $.session.end({ ...END, reason: 'other' })
+  expect(rex.label).toBe('✅ Parent session')
 })
