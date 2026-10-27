@@ -1,4 +1,4 @@
-import type { EngineInterface, Register, Timer } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
 type Status = 'idle' | 'working' | 'blocked' | 'done' | 'error'
 
@@ -6,12 +6,10 @@ const EMOJI: Record<Status, string> = {
   idle: '💤',
   working: '⏳',
   blocked: '❓',
-  done: '🟢',
+  done: '✅',
   error: '❌',
 }
-const SEEN_DONE_EMOJI = '✅'
-const PREFIX = /^(💤|⏳|❓|🟢|✅|❌) /
-const SEEN_POLL_MS = 2000
+const PREFIX = /^(💤|⏳|❓|✅|❌) /
 const REX_DEFAULT_LABEL = /^Window [0-9a-f]+$/
 const MAX_NAME = 60
 
@@ -22,32 +20,16 @@ let isMainTurnRunning = false
 const runningAgentTurns = new Set<string>()
 const pendingAsks = new Set<string>()
 let painting: Promise<void> = Promise.resolve()
-let lastShown: Status = 'idle'
-let isSeen = false
-let windowId: string | undefined
-let seenWatch: Timer | undefined
 
 function reset() {
   status = 'idle'
   isMainTurnRunning = false
   runningAgentTurns.clear()
   pendingAsks.clear()
-  lastShown = 'idle'
-  isSeen = false
-  stopSeenWatch()
 }
 
 function shown(): Status {
   return pendingAsks.size > 0 ? 'blocked' : status
-}
-
-function emoji(state: Status): string {
-  return state === 'done' && isSeen ? SEEN_DONE_EMOJI : EMOJI[state]
-}
-
-function stopSeenWatch() {
-  seenWatch?.cancel()
-  seenWatch = undefined
 }
 
 function parse(text: string | undefined): any {
@@ -75,20 +57,6 @@ async function rex($: EngineInterface, args: string[]): Promise<string | undefin
   }
 }
 
-async function activeWindowId($: EngineInterface, session: string): Promise<string | undefined> {
-  return parse(await rex($, ['session', 'inspect', session, '--json']))?.active_window_id
-}
-
-// Rex knows the frontmost tab per session, not whether the app or this session is in front.
-async function checkSeen($: EngineInterface) {
-  const session = await $.env.get('REX_SESSION')
-  if (!session || !windowId || isSeen) return stopSeenWatch()
-  if ((await activeWindowId($, session)) !== windowId) return
-  isSeen = true
-  stopSeenWatch()
-  await paint($)
-}
-
 async function repaint($: EngineInterface, isEnding: boolean) {
   const session = await $.env.get('REX_SESSION')
   const block = await $.env.get('REX_BLOCK')
@@ -97,18 +65,6 @@ async function repaint($: EngineInterface, isEnding: boolean) {
   const windows: RexWindow[] = parse(await rex($, ['window', 'ls', '-s', session, '--json']))?.windows ?? []
   const win = windows.find(w => w.layers.some(l => l.blocks.some(b => b.block_id === block)))
   if (!win) return
-  windowId = win.window_id
-
-  const state = shown()
-  if (state !== lastShown) {
-    lastShown = state
-    isSeen = false
-  }
-  if (isEnding || state !== 'done') stopSeenWatch()
-  else if (!isSeen) {
-    isSeen = (await activeWindowId($, session)) === win.window_id
-    if (!isSeen && !seenWatch) seenWatch = $.clock.every(SEEN_POLL_MS, () => void checkSeen($))
-  }
 
   const nameKey = `name:${block}`
   const ownName = await $.store.get(nameKey)
@@ -127,7 +83,7 @@ async function repaint($: EngineInterface, isEnding: boolean) {
     return
   }
 
-  const label = `${emoji(state)} ${name}`
+  const label = `${EMOJI[shown()]} ${name}`
   if (label !== win.label) await rex($, ['window', 'rename', '-s', session, '--', win.window_id, label])
   if (isAutoNamed) await $.store.set(nameKey, name)
   else await $.store.delete(nameKey)

@@ -6,9 +6,8 @@ A Claude Code plugin that prefixes the Rex tab label with an emoji for Claude's 
 | --- | --- |
 | 💤 | idle: session started, or the turn was interrupted |
 | ⏳ | working, including while subagents run |
-| ❓ | needs you: a permission prompt or a question, until you answer it |
-| 🟢 | done, and you have not looked at the tab yet |
-| ✅ | done, and you have seen it |
+| ❓ | needs you: a permission prompt or a question |
+| ✅ | done |
 | ❌ | the turn ended on an error |
 
 The tab follows Claude's terminal title. A tab you renamed yourself keeps your name and only the emoji changes. When the session ends, the prefix is removed and an auto-named tab goes back to Rex's default.
@@ -42,4 +41,4 @@ claude plugin test .
 
 ## Limits
 
-"Seen" means the tab was the frontmost one in its Rex session. Rex does not say whether the app itself, or that session, is in front. Two Claude sessions in split panes of one Rex tab overwrite each other's emoji. In auto mode a tool call the classifier decides on can show ❓ for a moment.
+Two Claude sessions in split panes of one Rex tab overwrite each other's emoji. In auto mode a tool call the classifier decides on can show ❓ for a moment.
