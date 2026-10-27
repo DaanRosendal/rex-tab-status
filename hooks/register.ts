@@ -20,6 +20,8 @@ let isMainTurnRunning = false
 const runningAgentTurns = new Set<string>()
 const pendingAsks = new Set<string>()
 let painting: Promise<void> = Promise.resolve()
+// A `claude -p` run inside a Rex pane inherits its variables and must leave that tab alone.
+let isInteractive = false
 
 function reset() {
   status = 'idle'
@@ -91,12 +93,14 @@ async function repaint($: EngineInterface, isEnding: boolean) {
 
 // Each hook awaits its own repaint so the `$` it hands over is still live.
 function paint($: EngineInterface, isEnding = false): Promise<void> {
+  if (!isInteractive) return painting
   painting = painting.then(() => repaint($, isEnding)).catch(() => {})
   return painting
 }
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
+    isInteractive = e.isInteractive
     reset()
     await paint($)
     return next(e)
@@ -114,7 +118,7 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       isMainTurnRunning = false
       pendingAsks.clear()
-      status = e.reason === 'error' ? 'error' : e.isAborted ? 'idle' : 'done'
+      status = e.reason === 'error' || e.reason === 'refusal' ? 'error' : e.isAborted ? 'idle' : 'done'
     } else {
       runningAgentTurns.delete(e.turnId)
       if (!isMainTurnRunning && status === 'working') status = 'done'
