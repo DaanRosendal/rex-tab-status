@@ -105,6 +105,29 @@ test('a question to the person shows while it is open', async ($, on) => {
   expect(rex.label).toBe('⏳ Fix login redirect')
 })
 
+test('an answered question goes back to working before its call returns', async ($, on) => {
+  const rex = fakeRex(on)
+  let labelAfterAnswer = ''
+  on('ui.render', ($, e) => h($.ui.resolve(e).Text, {}, 'row'))
+  on('tool.call', async (_, e) => {
+    const call = { tool_use_id: e.tool_use_id, tool: 'AskUserQuestion', input: {}, isErrored: false, isInterrupted: false }
+    await $.ui.render({
+      surface: 'terminal',
+      component: 'ToolGroup',
+      requestId: 'g1',
+      props: { calls: [{ ...call, isRunning: true }], isActive: true, isExpanded: false },
+    })
+    labelAfterAnswer = rex.label
+    return { result: {} }
+  })
+
+  await $.session.start(START)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as never)
+
+  expect(labelAfterAnswer).toBe('⏳ Fix login redirect')
+})
+
 test('a name the person gave the tab is kept, and the end hands it back', async ($, on) => {
   const rex = fakeRex(on, 'deploy')
 

@@ -98,6 +98,17 @@ function paint($: EngineInterface, isEnding = false): Promise<void> {
   return painting
 }
 
+type CallRow = { tool_use_id?: string; isRunning: boolean; output?: unknown }
+
+async function settleAsks($: EngineInterface, rows: readonly CallRow[]) {
+  let isSettled = false
+  for (const row of rows) {
+    const isPastDialog = row.isRunning || row.output !== undefined
+    if (isPastDialog && row.tool_use_id && pendingAsks.delete(row.tool_use_id)) isSettled = true
+  }
+  if (isSettled) await paint($)
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     isInteractive = e.isInteractive
@@ -146,6 +157,17 @@ export const register: Register = on => {
     const ran = await next(e)
     if (pendingAsks.delete(e.tool_use_id)) await paint($)
     return ran
+  })
+
+  // An answered dialog's call redraws as running at once, while `tool.call` resolves only when the tool finishes.
+  on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
+    await settleAsks($, [e.props])
+    return next(e)
+  })
+
+  on('ui.render', { component: 'ToolGroup' }, async ($, e, next) => {
+    await settleAsks($, e.props.calls)
+    return next(e)
   })
 
   // A /clear ends the conversation but keeps the tab, so it resets instead of restoring the name.
