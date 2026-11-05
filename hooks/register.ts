@@ -1,19 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-
-type Status = 'idle' | 'working' | 'blocked' | 'done' | 'error'
-
-const EMOJI: Record<Status, string> = {
-  idle: '💤',
-  working: '⏳',
-  blocked: '❓',
-  done: '✅',
-  error: '❌',
-}
-const PREFIX = /^(💤|⏳|❓|✅|❌) /
-const REX_DEFAULT_LABEL = /^Window [0-9a-f]+$/
-const MAX_NAME = 60
-
-type RexWindow = { window_id: string; label: string; layers: { blocks: { block_id: string }[] }[] }
+import { paintTab, type Status } from '../codex/hooks/rex.ts'
 
 let status: Status = 'idle'
 let isMainTurnRunning = false
@@ -34,22 +20,6 @@ function shown(): Status {
   return pendingAsks.size > 0 ? 'blocked' : status
 }
 
-function parse(text: string | undefined): any {
-  try {
-    return text === undefined ? undefined : JSON.parse(text)
-  } catch {
-    return undefined
-  }
-}
-
-// Rex rejects control characters and trims labels, so match that up front.
-function clean(text: unknown): string {
-  return String(text ?? '')
-    .slice(0, MAX_NAME)
-    .replace(/[\u0000-\u001f\u007f]/g, '')
-    .trim()
-}
-
 async function rex($: EngineInterface, args: string[]): Promise<string | undefined> {
   try {
     const ran = await $.process.run(['rex', ...args], { timeoutMs: 3000 })
@@ -64,30 +34,16 @@ async function repaint($: EngineInterface, isEnding: boolean) {
   const block = await $.env.get('REX_BLOCK')
   if (!session || !block) return
 
-  const windows: RexWindow[] = parse(await rex($, ['window', 'ls', '-s', session, '--json']))?.windows ?? []
-  const win = windows.find(w => w.layers.some(l => l.blocks.some(b => b.block_id === block)))
-  if (!win) return
-
   const nameKey = `name:${block}`
   const ownName = await $.store.get(nameKey)
-  const bare = win.label.replace(PREFIX, '')
-  const isAutoNamed = bare === '' || REX_DEFAULT_LABEL.test(bare) || bare === ownName
-
-  let name = bare
-  if (isAutoNamed) {
-    const title = parse(await rex($, ['block', 'call', '-s', session, '-b', block, 'title']))?.title
-    name = clean(title) || clean(parse(await rex($, ['session', 'inspect', session, '--json']))?.label) || bare
-  }
-
-  if (isEnding) {
-    await rex($, ['window', 'rename', '-s', session, '--', win.window_id, isAutoNamed ? '' : bare])
-    await $.store.delete(nameKey)
-    return
-  }
-
-  const label = `${EMOJI[shown()]} ${name}`
-  if (label !== win.label) await rex($, ['window', 'rename', '-s', session, '--', win.window_id, label])
-  if (isAutoNamed) await $.store.set(nameKey, name)
+  const { ownName: name } = await paintTab(args => rex($, args), {
+    session,
+    block,
+    status: shown(),
+    ownName: typeof ownName === 'string' ? ownName : undefined,
+    isEnding,
+  })
+  if (name !== undefined) await $.store.set(nameKey, name)
   else await $.store.delete(nameKey)
 }
 
