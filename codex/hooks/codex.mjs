@@ -7,6 +7,7 @@ import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { paintTab, parse } from './rex.ts'
+import { IdleDelay } from './idle.mjs'
 
 const exec = promisify(execFile)
 const PRIORITY = { idle: 0, done: 1, error: 2, working: 3, blocked: 4 }
@@ -26,12 +27,21 @@ function titleSignature(title) {
 export class CodexTabs {
   owned = new Map()
   titles = new Map()
+  painting = Promise.resolve()
+  stopping = false
 
   constructor(run) {
     this.run = run
   }
 
-  async refresh(session, blockId, windowId) {
+  refresh(session, blockId, windowId) {
+    if (this.stopping) return this.painting
+    const painting = this.painting.then(() => this.repaint(session, blockId, windowId))
+    this.painting = painting.catch(() => {})
+    return painting
+  }
+
+  async repaint(session, blockId, windowId) {
     const windows = parse(await this.run(['window', 'ls', '-s', session, '--json']))?.windows
     if (!Array.isArray(windows)) return
     for (const win of windows) {
@@ -40,7 +50,10 @@ export class CodexTabs {
       await this.paint(session, win)
     }
     for (const [key, own] of this.owned) {
-      if (own.session === session && !windows.some(w => w.window_id === own.window)) this.owned.delete(key)
+      if (own.session === session && !windows.some(w => w.window_id === own.window)) {
+        own.idle.cancel()
+        this.owned.delete(key)
+      }
     }
   }
 
@@ -79,6 +92,7 @@ export class CodexTabs {
 
     const candidates = reports.filter(r => r.records.length > 0)
     if (candidates.length === 0) {
+      own?.idle.cancel()
       if (own && win.label === own.label && blocks.length > 0) {
         await paintTab(this.run, { session, block: blocks[0].block_id, status: 'idle', ownName: own.name, isEnding: true, windows: [win] })
       }
@@ -90,22 +104,28 @@ export class CodexTabs {
     const status = candidates.some(c => c.needsInput)
       ? 'blocked'
       : candidates.flatMap(c => c.records).reduce((state, r) => PRIORITY[r.state] > PRIORITY[state] ? r.state : state, 'idle')
+    const owners = candidates.map(c => `${c.block}/${c.foreground?.pid}/${c.foreground?.name}`).join(',')
+    if (own && own.owners !== owners) own.idle.cancel()
+    const idle = own?.owners === owners ? own.idle : new IdleDelay(() => this.refresh(session, undefined, win.window_id))
     const result = await paintTab(this.run, {
       session,
       block,
-      status,
+      status: idle.update(status),
       ownName: own?.name,
       windows: [win],
       formatTitle: cleanTitle,
     })
-    this.owned.set(key, { session, window: win.window_id, name: result.ownName, label: result.label })
+    this.owned.set(key, { session, window: win.window_id, name: result.ownName, label: result.label, idle, owners })
   }
 
   async handle(event) {
     if (event?.type === 'session_destroyed') {
       const session = event.payload?.session_id
       if (typeof session !== 'string') return
-      for (const [key, own] of this.owned) if (own.session === session) this.owned.delete(key)
+      for (const [key, own] of this.owned) if (own.session === session) {
+        own.idle.cancel()
+        this.owned.delete(key)
+      }
       for (const key of this.titles.keys()) if (key.startsWith(`${session}/`)) this.titles.delete(key)
       return
     }
@@ -138,7 +158,10 @@ export class CodexTabs {
   }
 
   async restore() {
+    this.stopping = true
+    await this.painting
     for (const own of [...this.owned.values()]) {
+      own.idle.cancel()
       const windows = parse(await this.run(['window', 'ls', '-s', own.session, '--json']))?.windows ?? []
       const win = windows.find(w => w.window_id === own.window)
       if (!win || win.label !== own.label) continue

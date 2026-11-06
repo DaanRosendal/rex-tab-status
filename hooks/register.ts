@@ -1,15 +1,19 @@
 import type { EngineInterface, Register } from 'claude-code'
 import { paintTab, type Status } from '../codex/hooks/rex.ts'
+import { IdleDelay } from '../codex/hooks/idle.mjs'
 
 let status: Status = 'idle'
 let isMainTurnRunning = false
 const runningAgentTurns = new Set<string>()
 const pendingAsks = new Set<string>()
 let painting: Promise<void> = Promise.resolve()
+let idle: IdleDelay | undefined
 // A `claude -p` run inside a Rex pane inherits its variables and must leave that tab alone.
 let isInteractive = false
 
 function reset() {
+  idle?.cancel()
+  idle = undefined
   status = 'idle'
   isMainTurnRunning = false
   runningAgentTurns.clear()
@@ -29,7 +33,7 @@ async function rex($: EngineInterface, args: string[]): Promise<string | undefin
   }
 }
 
-async function repaint($: EngineInterface, isEnding: boolean) {
+async function repaint($: EngineInterface, isEnding: boolean, displayed: Status) {
   const session = await $.env.get('REX_SESSION')
   const block = await $.env.get('REX_BLOCK')
   if (!session || !block) return
@@ -39,7 +43,7 @@ async function repaint($: EngineInterface, isEnding: boolean) {
   const { ownName: name } = await paintTab(args => rex($, args), {
     session,
     block,
-    status: shown(),
+    status: displayed,
     ownName: typeof ownName === 'string' ? ownName : undefined,
     isEnding,
   })
@@ -50,7 +54,15 @@ async function repaint($: EngineInterface, isEnding: boolean) {
 // Each hook awaits its own repaint so the `$` it hands over is still live.
 function paint($: EngineInterface, isEnding = false): Promise<void> {
   if (!isInteractive) return painting
-  painting = painting.then(() => repaint($, isEnding)).catch(() => {})
+  const current = shown()
+  if (isEnding || current !== 'idle') {
+    idle?.cancel()
+    idle = undefined
+  } else {
+    idle ??= new IdleDelay(() => paint($), (ms, callback) => $.clock.after(ms, callback))
+  }
+  const displayed = idle ? idle.update(current) : current
+  painting = painting.then(() => repaint($, isEnding, displayed)).catch(() => {})
   return painting
 }
 

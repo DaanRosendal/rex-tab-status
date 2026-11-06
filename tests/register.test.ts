@@ -1,5 +1,6 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
+import { IDLE_DELAY_MS } from '../codex/hooks/idle.mjs'
 
 const SESSION = 'session:s1'
 const BLOCK = 'block:b1'
@@ -46,11 +47,48 @@ const END = { sessionId: 's', resume: {} as never }
 const done = (turnId: string, agentId?: string) =>
   ({ turnId, agentId, answer: '', durationMs: 1, isAborted: false, reason: 'answer' }) as const
 
+test('idle changes to sleeping only after five minutes without another hook event', async ($, on) => {
+  const clock = mock.clock(on)
+  const rex = fakeRex(on)
+  await $.session.start(START)
+  await clock.advance(IDLE_DELAY_MS - 1)
+  expect(rex.label).toBe('Fix login redirect')
+  await clock.advance(1)
+  await clock.settle()
+  expect(rex.label).toBe('💤 Fix login redirect')
+})
+
+test('starting work cancels the idle timer and an interruption starts a fresh one', async ($, on) => {
+  const clock = mock.clock(on)
+  const rex = fakeRex(on)
+  await $.session.start(START)
+  await clock.advance(IDLE_DELAY_MS - 1)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await clock.advance(IDLE_DELAY_MS)
+  expect(rex.label).toBe('⏳ Fix login redirect')
+  await $.turn.complete({ ...done('t1'), isAborted: true, reason: 'aborted' })
+  await clock.advance(IDLE_DELAY_MS - 1)
+  expect(rex.label).toBe('Fix login redirect')
+  await clock.advance(1)
+  await clock.settle()
+  expect(rex.label).toBe('💤 Fix login redirect')
+})
+
+test('session exit cancels the idle timer', async ($, on) => {
+  const clock = mock.clock(on)
+  const rex = fakeRex(on)
+  await $.session.start(START)
+  await $.session.end({ ...END, reason: 'prompt_input_exit' })
+  await clock.advance(IDLE_DELAY_MS)
+  await clock.settle()
+  expect(rex.label).toBe('Window 0000beef')
+})
+
 test('a text-only answer goes idle, working, done', async ($, on) => {
   const rex = fakeRex(on)
 
   await $.session.start(START)
-  expect(rex.label).toBe('💤 Fix login redirect')
+  expect(rex.label).toBe('Fix login redirect')
 
   await $.turn.start({ text: 'why?', turnId: 't1' })
   expect(rex.label).toBe('⏳ Fix login redirect')
@@ -78,7 +116,7 @@ test('an interrupt and an error each show', async ($, on) => {
   await $.session.start(START)
   await $.turn.start({ text: 'go', turnId: 't1' })
   await $.turn.complete({ ...done('t1'), isAborted: true, reason: 'aborted' })
-  expect(rex.label).toBe('💤 Fix login redirect')
+  expect(rex.label).toBe('Fix login redirect')
 
   await $.turn.start({ text: 'again', turnId: 't2' })
   await $.turn.complete({ ...done('t2'), reason: 'error' })

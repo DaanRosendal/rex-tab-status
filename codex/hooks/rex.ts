@@ -1,8 +1,9 @@
-export type Status = 'idle' | 'working' | 'blocked' | 'done' | 'error'
+export type Status = 'ready' | 'idle' | 'working' | 'blocked' | 'done' | 'error'
 export type RunRex = (args: string[]) => Promise<string | undefined>
 export type RexWindow = { window_id: string; label: string; layers: { blocks: { block_id: string }[] }[] }
 
 const EMOJI: Record<Status, string> = {
+  ready: '',
   idle: '💤',
   working: '⏳',
   blocked: '❓',
@@ -60,7 +61,7 @@ export async function paintTab(
       || bare
   }
 
-  const label = `${EMOJI[status]} ${name}`
+  const label = EMOJI[status] ? `${EMOJI[status]} ${name}` : name
   if (label !== win.label && await run(['window', 'rename', '-s', session, '--', win.window_id, label]) === undefined) {
     return { ownName, label: win.label }
   }
