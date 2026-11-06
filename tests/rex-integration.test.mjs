@@ -57,17 +57,19 @@ test('the installed watcher follows real Rex events and restores labels on shutd
     let errors = ''
     worker.stderr.on('data', chunk => { errors += chunk })
     exited = once(worker, 'exit')
-    await eventually(async () => assert.equal(await label(), '💤 Codex integration test'))
+    await eventually(async () => assert.equal(await label(), 'Codex integration test'))
 
     await Promise.all([exec(process.execPath, [plugin, 'start'], { env }), exec(process.execPath, [plugin, 'start'], { env })])
     const locks = (await readdir(data)).filter(name => name.endsWith('.pid'))
     assert.equal(locks.length, 1)
     assert.equal(await readFile(join(data, locks[0]), 'utf8'), String(worker.pid))
 
-    for (const [state, emoji] of [['working', '⏳'], ['blocked', '❓'], ['working', '⏳'], ['done', '✅'], ['error', '❌'], ['idle', '💤']]) {
+    for (const [state, emoji] of [['working', '⏳'], ['blocked', '❓'], ['working', '⏳'], ['done', '✅'], ['error', '❌']]) {
       await send({ state })
       await eventually(async () => assert.equal(await label(), `${emoji} Codex integration test`))
     }
+    await send({ state: 'idle' })
+    assert.equal(await label(), '❌ Codex integration test')
     await send({ state: 'working', title: '⠹ New topic' })
     await eventually(async () => assert.equal(await label(), '⏳ New topic'))
     await send({ titleOnly: true, title: '[ ! ] Action Required | New topic' })

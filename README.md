@@ -4,13 +4,15 @@ A Claude Code and Codex plugin that prefixes the Rex tab label with an emoji for
 
 | Emoji | State |
 | --- | --- |
-| 💤 | idle: session started, or the turn was interrupted |
+| 💤 | idle for five minutes after startup or an interruption |
 | ⏳ | working, including while subagents run |
 | ❓ | needs you: a permission prompt or a question |
 | ✅ | done |
 | ❌ | the turn ended on an error |
 
 The tab follows the agent's terminal title. A tab you renamed yourself keeps your name and only the emoji changes. When the agent exits, the prefix is removed and an auto-named tab goes back to Rex's default.
+
+Idle starts a five-minute countdown. During that wait, the previous ✅ or ❌ stays visible. A newly started or interrupted idle tab has no emoji. Work or a question cancels the countdown.
 
 It does nothing outside Rex or when `rex` is not on the `PATH`.
 

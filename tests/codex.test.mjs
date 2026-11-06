@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { claimLock, CodexTabs } from '../codex/hooks/codex.mjs'
+import { IDLE_DELAY_MS } from '../codex/hooks/idle.mjs'
 
 const SESSION = 'session:s1'
 const BLOCK = 'block:b1'
@@ -46,13 +47,85 @@ function event(name, payload = {}) {
   return { type: 'session_event', payload: { session_id: SESSION, event: { type: 'block_event', payload: { block_id: BLOCK, creator_name: TERMINAL, name, payload } } } }
 }
 
-test('Codex native status reports drive all five emojis', async () => {
+test('Codex native status reports show active and completed states immediately', async () => {
   const { blocks, tab, tabs } = setup()
-  for (const [state, emoji] of [['idle', '💤'], ['working', '⏳'], ['blocked', '❓'], ['working', '⏳'], ['done', '✅'], ['error', '❌']]) {
+  for (const [state, emoji] of [['working', '⏳'], ['blocked', '❓'], ['working', '⏳'], ['done', '✅'], ['error', '❌']]) {
     blocks.get(BLOCK).records[0].state = state
     await tabs.handle(event('program_status_changed'))
     assert.equal(tab.label, `${emoji} Fix login redirect | project`)
   }
+})
+
+test('idle shows no emoji until five minutes pass without further events', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const { tab, tabs } = setup()
+  await tabs.refresh(SESSION)
+  assert.equal(tab.label, 'Fix login redirect | project')
+  t.mock.timers.tick(IDLE_DELAY_MS - 1)
+  await tabs.handle(event('program_status_changed'))
+  assert.equal(tab.label, 'Fix login redirect | project')
+  t.mock.timers.tick(1)
+  await Promise.resolve()
+  await tabs.painting
+  assert.equal(tab.label, '💤 Fix login redirect | project')
+})
+
+for (const [state, emoji] of [['done', '✅'], ['error', '❌']]) {
+  test(`${state} stays visible during the five-minute idle delay`, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] })
+    const { blocks, tab, tabs } = setup()
+    blocks.get(BLOCK).records[0].state = state
+    await tabs.refresh(SESSION)
+    blocks.get(BLOCK).records[0].state = 'idle'
+    await tabs.refresh(SESSION)
+    assert.equal(tab.label, `${emoji} Fix login redirect | project`)
+    t.mock.timers.tick(IDLE_DELAY_MS - 1)
+    await tabs.refresh(SESSION)
+    assert.equal(tab.label, `${emoji} Fix login redirect | project`)
+    t.mock.timers.tick(1)
+    await Promise.resolve()
+    await tabs.painting
+    assert.equal(tab.label, '💤 Fix login redirect | project')
+  })
+}
+
+test('working and unanswered questions cancel the idle countdown', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const { blocks, tab, tabs } = setup()
+  await tabs.refresh(SESSION)
+  t.mock.timers.tick(IDLE_DELAY_MS - 1)
+  blocks.get(BLOCK).records[0].state = 'working'
+  await tabs.refresh(SESSION)
+  t.mock.timers.tick(IDLE_DELAY_MS)
+  await Promise.resolve()
+  await tabs.painting
+  assert.equal(tab.label, '⏳ Fix login redirect | project')
+  blocks.get(BLOCK).records[0].state = 'idle'
+  await tabs.refresh(SESSION)
+  blocks.get(BLOCK).title = '[ ! ] Action Required | Fix login redirect | project'
+  await tabs.refresh(SESSION)
+  t.mock.timers.tick(IDLE_DELAY_MS)
+  await Promise.resolve()
+  await tabs.painting
+  assert.equal(tab.label, '❓ Fix login redirect | project')
+  blocks.get(BLOCK).title = 'Fix login redirect | project'
+  await tabs.refresh(SESSION)
+  t.mock.timers.tick(IDLE_DELAY_MS - 1)
+  await tabs.refresh(SESSION)
+  assert.equal(tab.label, 'Fix login redirect | project')
+})
+
+test('shutdown cancels deferred idle repainting', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const { tab, tabs, calls } = setup()
+  await tabs.refresh(SESSION)
+  await tabs.restore()
+  const before = calls.length
+  t.mock.timers.tick(IDLE_DELAY_MS)
+  await Promise.resolve()
+  await tabs.painting
+  assert.equal(calls.length, before)
+  assert.equal(tab.label, 'Window 0000beef')
 })
 
 test('child work and questions remain visible after the root finishes', async () => {
@@ -131,7 +204,7 @@ test('auto names follow title changes without following spinner ticks', async ()
   assert.equal(calls.length, before)
   blocks.get(BLOCK).title = '⠸ Second topic'
   await tabs.handle(event('title_changed', { title: '⠸ Second topic' }))
-  assert.equal(tab.label, '💤 Second topic')
+  assert.equal(tab.label, 'Second topic')
   await tabs.restore()
   assert.equal(tab.label, 'Window 0000beef')
 })
@@ -141,7 +214,7 @@ test('a manual rename during a turn is preserved when Codex exits', async () => 
   await tabs.refresh(SESSION)
   tab.label = 'deploy $(keep-this-literal)'
   await tabs.handle({ type: 'session_event', payload: { session_id: SESSION, event: { type: 'window_label_changed', payload: { window_id: WINDOW, label: tab.label } } } })
-  assert.equal(tab.label, '💤 deploy $(keep-this-literal)')
+  assert.equal(tab.label, 'deploy $(keep-this-literal)')
   blocks.get(BLOCK).foreground = { pid: 20, name: 'zsh' }
   await tabs.handle(event('process_changed'))
   assert.equal(tab.label, 'deploy $(keep-this-literal)')
@@ -201,10 +274,10 @@ test('a failed rename retains ownership so a later title change is still automat
   failRename = true
   blocks.get(BLOCK).title = 'Second topic'
   await tabs.refresh(SESSION)
-  assert.equal(tab.label, '💤 Fix login redirect | project')
+  assert.equal(tab.label, 'Fix login redirect | project')
   failRename = false
   await tabs.refresh(SESSION)
-  assert.equal(tab.label, '💤 Second topic')
+  assert.equal(tab.label, 'Second topic')
 })
 
 test('each host selects its own hook format under the same plugin identity', async () => {
