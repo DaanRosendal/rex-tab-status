@@ -1,5 +1,15 @@
 {
   "name": "rex-tab-status",
-  "owner": { "name": "Daan Rosendal" },
-  "plugins": [{ "name": "rex-tab-status", "source": "./" }]
+  "metadata": {
+    "description": "Emoji status on Rex tabs for Claude Code and Codex"
+  },
+  "owner": {
+    "name": "Daan Rosendal"
+  },
+  "plugins": [
+    {
+      "name": "rex-tab-status",
+      "source": "./"
+    }
+  ]
 }
