@@ -25,14 +25,14 @@ Needs a Claude Code version with function hooks. Tested on 2.1.310.
 At the prompt of a terminal session:
 
 ```
-/plugin marketplace add git@gitlab.com:daan.rosendal/rex-tab-status.git
+/plugin marketplace add https://github.com/DaanRosendal/rex-tab-status.git
 /plugin install rex-tab-status@rex-tab-status
 ```
 
 From a shell:
 
 ```bash
-claude plugin marketplace add git@gitlab.com:daan.rosendal/rex-tab-status.git
+claude plugin marketplace add https://github.com/DaanRosendal/rex-tab-status.git
 claude plugin install rex-tab-status@rex-tab-status
 ```
 
@@ -41,7 +41,7 @@ claude plugin install rex-tab-status@rex-tab-status
 Needs Node.js 22.18 or newer and a Codex version that reports program status to Rex. Tested on Codex 0.166.0.
 
 ```bash
-codex plugin marketplace add git@gitlab.com:daan.rosendal/rex-tab-status.git
+codex plugin marketplace add https://github.com/DaanRosendal/rex-tab-status.git
 codex plugin add rex-tab-status@rex-tab-status
 ```
 
