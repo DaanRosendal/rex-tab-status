@@ -12,7 +12,7 @@ import { IdleDelay } from './idle.mjs'
 const exec = promisify(execFile)
 const PRIORITY = { idle: 0, done: 1, error: 2, working: 3, blocked: 4 }
 const TERMINAL = 'com.superlogical.terminal'
-// Codex marks async questions in its title while OSC 7501 can stay working.
+// Codex marks an async question in the terminal title while its status report can stay at working.
 const ACTION_REQUIRED = /^\[ [!.] \] Action Required(?: \| |$)/
 const filename = fileURLToPath(import.meta.url)
 

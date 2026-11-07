@@ -4,8 +4,7 @@ export type RexWindow = { window_id: string; label: string; layers: { blocks: { 
 
 export type Icons = Record<Status, string>
 
-// Presets are append-only: every icon of every preset stays in PREFIX, so a tab
-// painted under any theme is cleaned up under any other.
+// Never remove an icon from a preset: tabs already showing it could no longer be cleaned.
 export const THEMES = {
   default: { ready: '', idle: '💤', working: '⏳', blocked: '❓', done: '✅', error: '❌' },
   ascii: { ready: '', idle: '[zz]', working: '[..]', blocked: '[?]', done: '[ok]', error: '[x]' },
