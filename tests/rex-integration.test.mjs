@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { execFile, spawn } from 'node:child_process'
+import { execFile, spawn, spawnSync } from 'node:child_process'
 import { once } from 'node:events'
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
+const skip = spawnSync('rex', ['--help'], { stdio: 'ignore' }).status === 0 ? false : 'rex is not installed'
 const plugin = fileURLToPath(new URL('../codex/hooks/codex.mjs', import.meta.url))
 const fixture = fileURLToPath(new URL('./fixtures/codex-terminal.mjs', import.meta.url))
 
@@ -27,7 +28,7 @@ async function eventually(check) {
   throw error
 }
 
-test('the installed watcher follows real Rex events and restores labels on shutdown', { timeout: 45000 }, async () => {
+test('the installed watcher follows real Rex events and restores labels on shutdown', { timeout: 45000, skip }, async () => {
   const dir = await mkdtemp('/tmp/rex-tab-status-test-')
   const endpoint = `unix://${dir}/server.sock`
   const data = join(dir, 'codex-data')
@@ -59,7 +60,8 @@ test('the installed watcher follows real Rex events and restores labels on shutd
     exited = once(worker, 'exit')
     await eventually(async () => assert.equal(await label(), 'Codex integration test'))
 
-    await Promise.all([exec(process.execPath, [plugin, 'start'], { env }), exec(process.execPath, [plugin, 'start'], { env })])
+    const startEnv = { ...env, REX_SESSION: 'session:obsolete' }
+    await Promise.all([exec(process.execPath, [plugin, 'start'], { env: startEnv }), exec(process.execPath, [plugin, 'start'], { env: startEnv })])
     const locks = (await readdir(data)).filter(name => name.endsWith('.pid'))
     assert.equal(locks.length, 1)
     assert.equal(await readFile(join(data, locks[0]), 'utf8'), String(worker.pid))

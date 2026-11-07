@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { paintTab, parse, resolveTheme } from './rex.ts'
+import { blocksOf, paintTab, parse, parseWindows, resolveTheme } from './rex.ts'
 import { IdleDelay } from './idle.mjs'
 
 const exec = promisify(execFile)
@@ -37,17 +37,16 @@ export class CodexTabs {
 
   refresh(session, blockId, windowId) {
     if (this.stopping) return this.painting
-    const painting = this.painting.then(() => this.repaint(session, blockId, windowId))
-    this.painting = painting.catch(() => {})
-    return painting
+    this.painting = this.painting.then(() => this.repaint(session, blockId, windowId)).catch(() => {})
+    return this.painting
   }
 
   async repaint(session, blockId, windowId) {
-    const windows = parse(await this.run(['window', 'ls', '-s', session, '--json']))?.windows
-    if (!Array.isArray(windows)) return
+    const windows = parseWindows(await this.run(['window', 'ls', '-s', session, '--json']))
+    if (!windows) return
     for (const win of windows) {
       if (windowId && win.window_id !== windowId) continue
-      if (blockId && !win.layers.some(l => l.blocks.some(b => b.block_id === blockId))) continue
+      if (blockId && !blocksOf(win).some(b => b.block_id === blockId)) continue
       await this.paint(session, win)
     }
     for (const [key, own] of this.owned) {
@@ -61,7 +60,7 @@ export class CodexTabs {
   async paint(session, win) {
     const key = `${session}/${win.window_id}`
     const own = this.owned.get(key)
-    const blocks = win.layers.flatMap(l => l.blocks).filter(b => !b.creator_name || b.creator_name === TERMINAL)
+    const blocks = blocksOf(win).filter(b => !b.creator_name || b.creator_name === TERMINAL)
     const reports = await Promise.all(blocks.map(async block => {
       const [status, process, title] = await Promise.all([
         this.run(['block', 'call', '-s', session, '-b', block.block_id, 'program_status']),
@@ -164,10 +163,10 @@ export class CodexTabs {
     await this.painting
     for (const own of [...this.owned.values()]) {
       own.idle.cancel()
-      const windows = parse(await this.run(['window', 'ls', '-s', own.session, '--json']))?.windows ?? []
+      const windows = parseWindows(await this.run(['window', 'ls', '-s', own.session, '--json'])) ?? []
       const win = windows.find(w => w.window_id === own.window)
       if (!win || win.label !== own.label) continue
-      const blocks = win.layers.flatMap(l => l.blocks)
+      const blocks = blocksOf(win)
       const processes = await Promise.all(blocks.map(b => this.run(['block', 'call', '-s', own.session, '-b', b.block_id, 'process'])))
       if (processes.some(p => parse(p) === undefined || ['claude', 'claude-code'].includes(parse(p)?.foreground?.name))) continue
       if (blocks.length > 0) await paintTab(this.run, { session: own.session, block: blocks[0].block_id, status: 'idle', ownName: own.name, isEnding: true, windows: [win], icons: this.icons })
@@ -230,14 +229,19 @@ async function watch(server, instance) {
   const tabs = new CodexTabs(run, resolveTheme(process.env.REX_TAB_STATUS_THEME))
   const events = spawn('rex', rexArgs(server, ['events', '--all', '--json']), { stdio: ['ignore', 'pipe', 'ignore'] })
   const lines = createInterface({ input: events.stdout })
+  const input = lines[Symbol.asyncIterator]()
   const stop = () => events.kill('SIGTERM')
   process.once('SIGTERM', stop)
   process.once('SIGINT', stop)
   events.on('error', () => lines.close())
   try {
     const sessions = parse(await run(['ls', '--json']))?.sessions ?? []
-    for (const session of sessions) await tabs.refresh(session.session_id)
-    for await (const line of lines) await tabs.handle(parse(line))
+    for (const session of sessions) if (typeof session?.session_id === 'string') await tabs.refresh(session.session_id)
+    for await (const line of input) {
+      try {
+        await tabs.handle(parse(line))
+      } catch {}
+    }
   } finally {
     stop()
     await tabs.restore()
@@ -250,6 +254,7 @@ async function watch(server, instance) {
 async function main() {
   if (process.argv[2] === 'watch') return watch(process.argv[3], process.argv[4])
   if (process.argv[2] !== 'start') throw new Error('Usage: node hooks/codex.mjs start')
+  if (!process.env.REX_SESSION && !process.env.REX_BLOCK && !process.env.REX_SERVER) return
   const info = parse(await runner()(['whoami', '--json']))
   if (!info?.endpoint || !info?.instance_id) return
   const child = spawn(process.execPath, [filename, 'watch', info.endpoint, info.instance_id], { detached: true, stdio: 'ignore' })

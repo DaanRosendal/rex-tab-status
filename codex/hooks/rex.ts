@@ -1,6 +1,6 @@
 export type Status = 'ready' | 'idle' | 'working' | 'blocked' | 'done' | 'error'
 export type RunRex = (args: string[]) => Promise<string | undefined>
-export type RexWindow = { window_id: string; label: string; layers: { blocks: { block_id: string }[] }[] }
+export type RexWindow = { window_id: string; label: string; layers?: { blocks?: { block_id: string; creator_name?: string }[] }[] }
 
 export type Icons = Record<Status, string>
 
@@ -37,6 +37,15 @@ export function parse(text: string | undefined): any {
   }
 }
 
+export function parseWindows(text: string | undefined): RexWindow[] | undefined {
+  const windows = parse(text)?.windows
+  return Array.isArray(windows) ? windows.filter(w => typeof w?.window_id === 'string' && typeof w?.label === 'string') : undefined
+}
+
+export function blocksOf(win: RexWindow) {
+  return (win.layers ?? []).flatMap(layer => layer?.blocks ?? [])
+}
+
 function clean(text: unknown): string {
   return String(text ?? '')
     .slice(0, 60)
@@ -59,8 +68,8 @@ export async function paintTab(
 ): Promise<{ ownName?: string; label?: string }> {
   const { session, block, status, ownName, isEnding } = options
   const icons = options.icons ?? THEMES.default
-  const windows: RexWindow[] = options.windows ?? parse(await run(['window', 'ls', '-s', session, '--json']))?.windows ?? []
-  const win = windows.find(w => w.layers.some(l => l.blocks.some(b => b.block_id === block)))
+  const windows: RexWindow[] = options.windows ?? parseWindows(await run(['window', 'ls', '-s', session, '--json'])) ?? []
+  const win = windows.find(w => blocksOf(w).some(b => b.block_id === block))
   if (!win) return { ownName }
 
   const bare = win.label.replace(PREFIX, '')
