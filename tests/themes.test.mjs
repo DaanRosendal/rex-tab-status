@@ -1,32 +1,14 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { CodexTabs } from '../codex/hooks/codex.mjs'
-import { paintTab, resolveTheme, THEMES } from '../codex/hooks/rex.ts'
+import { CodexTabs } from '../codex/hooks/tabs.mjs'
+import { paintTab } from '../codex/hooks/paint.ts'
+import { resolveTheme, THEMES } from '../codex/hooks/themes.ts'
+import { BLOCK, createFakeRex, SESSION } from './helpers/fake-rex.mjs'
 
-const SESSION = 'session:s1'
-const BLOCK = 'block:b1'
-const WINDOW = 'window:w1'
 const STATES = ['idle', 'working', 'blocked', 'done', 'error']
 
-function fakeRex(label = 'Window 0000beef') {
-  const tab = { label }
-  const run = async args => {
-    const [noun, verb] = args
-    if (noun === 'window' && verb === 'ls') {
-      return JSON.stringify({
-        windows: [
-          { window_id: WINDOW, label: tab.label, layers: [{ blocks: [{ block_id: BLOCK }] }] },
-        ],
-      })
-    }
-    if (noun === 'window' && verb === 'rename') {
-      tab.label = args.at(-1) || 'Window 0000beef'
-      return ''
-    }
-    if (noun === 'block' && verb === 'call') return JSON.stringify({ title: 'Fix login redirect' })
-    if (noun === 'session' && verb === 'inspect') return JSON.stringify({ label: 'project' })
-    return undefined
-  }
+function fakeRex(label) {
+  const { tab, run } = createFakeRex({ label, title: 'Fix login redirect', records: [] })
   return { tab, run }
 }
 

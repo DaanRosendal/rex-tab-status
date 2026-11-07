@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
-const plugin = fileURLToPath(new URL('../codex/hooks/codex.mjs', import.meta.url))
+const plugin = fileURLToPath(new URL('../codex/hooks/watcher.mjs', import.meta.url))
 const TERMINAL = 'com.superlogical.terminal'
 
 async function fakeRex(dir) {

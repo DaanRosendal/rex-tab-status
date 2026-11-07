@@ -11,11 +11,15 @@ import { promisify } from 'node:util'
 const exec = promisify(execFile)
 const skip =
   spawnSync('rex', ['--help'], { stdio: 'ignore' }).status === 0 ? false : 'rex is not installed'
-const plugin = fileURLToPath(new URL('../codex/hooks/codex.mjs', import.meta.url))
+const plugin = fileURLToPath(new URL('../codex/hooks/watcher.mjs', import.meta.url))
 const fixture = fileURLToPath(new URL('./fixtures/codex-terminal.mjs', import.meta.url))
 
+const TEST_TIMEOUT_MS = 45000
+const EVENTUALLY_TIMEOUT_MS = 8000
+const POLL_INTERVAL_MS = 50
+
 async function eventually(check) {
-  const deadline = Date.now() + 8000
+  const deadline = Date.now() + EVENTUALLY_TIMEOUT_MS
   let error
   while (Date.now() < deadline) {
     try {
@@ -23,7 +27,7 @@ async function eventually(check) {
       return
     } catch (e) {
       error = e
-      await setTimeout(50)
+      await setTimeout(POLL_INTERVAL_MS)
     }
   }
   throw error
@@ -31,8 +35,9 @@ async function eventually(check) {
 
 test(
   'the installed watcher follows real Rex events and restores labels on shutdown',
-  { timeout: 45000, skip },
+  { timeout: TEST_TIMEOUT_MS, skip },
   async () => {
+    // Unix socket paths are limited to about 100 characters, which os.tmpdir() exceeds on macOS.
     const dir = await mkdtemp('/tmp/rex-tab-status-test-')
     const endpoint = `unix://${dir}/server.sock`
     const data = join(dir, 'codex-data')
@@ -46,7 +51,7 @@ test(
           timeout: 5000,
         })
       ).stdout
-    let worker
+    let watcher
     let exited
     let started = false
     try {
@@ -84,15 +89,15 @@ test(
         await run(['send-key', '-s', session, '-b', block, 'enter'])
       }
 
-      worker = spawn(process.execPath, [plugin, 'watch', endpoint, info.instance_id], {
+      watcher = spawn(process.execPath, [plugin, 'watch', endpoint, info.instance_id], {
         env,
         stdio: ['ignore', 'ignore', 'pipe'],
       })
       let errors = ''
-      worker.stderr.on('data', chunk => {
+      watcher.stderr.on('data', chunk => {
         errors += chunk
       })
-      exited = once(worker, 'exit')
+      exited = once(watcher, 'exit')
       await eventually(async () => assert.equal(await label(), 'Codex integration test'))
 
       const startEnv = { ...env, REX_SESSION: 'session:obsolete' }
@@ -102,7 +107,7 @@ test(
       ])
       const locks = (await readdir(data)).filter(name => name.endsWith('.pid'))
       assert.equal(locks.length, 1)
-      assert.equal(await readFile(join(data, locks[0]), 'utf8'), String(worker.pid))
+      assert.equal(await readFile(join(data, locks[0]), 'utf8'), String(watcher.pid))
 
       for (const [state, emoji] of [
         ['working', '⏳'],
@@ -115,7 +120,8 @@ test(
         await eventually(async () => assert.equal(await label(), `${emoji} Codex integration test`))
       }
       await send({ state: 'idle' })
-      assert.equal(await label(), '❌ Codex integration test')
+      await send({ titleOnly: true, title: '⠹ After idle' })
+      await eventually(async () => assert.equal(await label(), '❌ After idle'))
       await send({ state: 'working', title: '⠹ New topic' })
       await eventually(async () => assert.equal(await label(), '⏳ New topic'))
       await send({ titleOnly: true, title: '[ ! ] Action Required | New topic' })
@@ -133,18 +139,18 @@ test(
       await send({ state: 'done' })
       await eventually(async () => assert.equal(await label(), `✅ ${custom}`))
 
-      worker.kill('SIGTERM')
+      watcher.kill('SIGTERM')
       const [code] = await exited
-      worker = undefined
+      watcher = undefined
       assert.equal(code, 0, errors)
       assert.equal(await label(), custom)
       assert.equal(errors, '')
     } finally {
-      if (worker) {
-        worker.kill('SIGTERM')
+      if (watcher) {
+        watcher.kill('SIGTERM')
         await exited
       }
-      if (started) await run(['server', 'stop'])
+      if (started) await run(['server', 'stop']).catch(() => {})
       await rm(dir, { recursive: true, force: true })
     }
   },

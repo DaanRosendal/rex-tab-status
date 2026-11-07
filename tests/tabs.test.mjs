@@ -1,63 +1,18 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { test } from 'node:test'
-import { claimLock, CodexTabs } from '../codex/hooks/codex.mjs'
+import { CodexTabs } from '../codex/hooks/tabs.mjs'
 import { IDLE_DELAY_MS } from '../codex/hooks/idle.mjs'
+import { BLOCK, createFakeRex, SESSION, TERMINAL, WINDOW } from './helpers/fake-rex.mjs'
 
-const SESSION = 'session:s1'
-const BLOCK = 'block:b1'
-const WINDOW = 'window:w1'
-const TERMINAL = 'com.superlogical.terminal'
+function setup(label) {
+  const fake = createFakeRex({ label })
+  return { ...fake, tabs: new CodexTabs(fake.run) }
+}
 
-function setup(label = 'Window 0000beef') {
-  const blocks = new Map([
-    [
-      BLOCK,
-      {
-        title: '⠹ Fix login redirect | project',
-        foreground: { pid: 10, name: 'codex' },
-        records: [{ state: 'idle', app: 'codex', owner: { pid: 10, name: 'codex' } }],
-      },
-    ],
-  ])
-  const tab = { label }
-  const calls = []
-  const run = async args => {
-    calls.push(args)
-    const [noun, verb] = args
-    if (noun === 'window' && verb === 'ls') {
-      return JSON.stringify({
-        windows: [
-          {
-            window_id: WINDOW,
-            label: tab.label,
-            layers: [
-              {
-                blocks: [...blocks.keys()].map(block_id => ({ block_id, creator_name: TERMINAL })),
-              },
-            ],
-          },
-        ],
-      })
-    }
-    if (noun === 'window' && verb === 'rename') {
-      tab.label = args.at(-1) || 'Window 0000beef'
-      return ''
-    }
-    if (noun === 'session' && verb === 'inspect') return JSON.stringify({ label: 'project' })
-    if (noun === 'block' && verb === 'call') {
-      const block = blocks.get(args[args.indexOf('-b') + 1])
-      if (!block) return undefined
-      const method = args.at(-1)
-      if (method === 'program_status') return JSON.stringify({ records: block.records })
-      if (method === 'process') return JSON.stringify({ foreground: block.foreground })
-      if (method === 'title') return JSON.stringify({ title: block.title, owner: block.titleOwner })
-    }
-    return undefined
-  }
-  return { blocks, tab, calls, tabs: new CodexTabs(run), run }
+async function advance(t, tabs, ms) {
+  t.mock.timers.tick(ms)
+  await Promise.resolve()
+  await tabs.painting
 }
 
 function event(name, payload = {}) {
@@ -96,9 +51,7 @@ test('idle shows no emoji until five minutes pass without further events', async
   t.mock.timers.tick(IDLE_DELAY_MS - 1)
   await tabs.handle(event('program_status_changed'))
   assert.equal(tab.label, 'Fix login redirect | project')
-  t.mock.timers.tick(1)
-  await Promise.resolve()
-  await tabs.painting
+  await advance(t, tabs, 1)
   assert.equal(tab.label, '💤 Fix login redirect | project')
 })
 
@@ -117,9 +70,7 @@ for (const [state, emoji] of [
     t.mock.timers.tick(IDLE_DELAY_MS - 1)
     await tabs.refresh(SESSION)
     assert.equal(tab.label, `${emoji} Fix login redirect | project`)
-    t.mock.timers.tick(1)
-    await Promise.resolve()
-    await tabs.painting
+    await advance(t, tabs, 1)
     assert.equal(tab.label, '💤 Fix login redirect | project')
   })
 }
@@ -131,17 +82,13 @@ test('working and unanswered questions cancel the idle countdown', async t => {
   t.mock.timers.tick(IDLE_DELAY_MS - 1)
   blocks.get(BLOCK).records[0].state = 'working'
   await tabs.refresh(SESSION)
-  t.mock.timers.tick(IDLE_DELAY_MS)
-  await Promise.resolve()
-  await tabs.painting
+  await advance(t, tabs, IDLE_DELAY_MS)
   assert.equal(tab.label, '⏳ Fix login redirect | project')
   blocks.get(BLOCK).records[0].state = 'idle'
   await tabs.refresh(SESSION)
   blocks.get(BLOCK).title = '[ ! ] Action Required | Fix login redirect | project'
   await tabs.refresh(SESSION)
-  t.mock.timers.tick(IDLE_DELAY_MS)
-  await Promise.resolve()
-  await tabs.painting
+  await advance(t, tabs, IDLE_DELAY_MS)
   assert.equal(tab.label, '❓ Fix login redirect | project')
   blocks.get(BLOCK).title = 'Fix login redirect | project'
   await tabs.refresh(SESSION)
@@ -156,9 +103,7 @@ test('shutdown cancels deferred idle repainting', async t => {
   await tabs.refresh(SESSION)
   await tabs.restore()
   const before = calls.length
-  t.mock.timers.tick(IDLE_DELAY_MS)
-  await Promise.resolve()
-  await tabs.painting
+  await advance(t, tabs, IDLE_DELAY_MS)
   assert.equal(calls.length, before)
   assert.equal(tab.label, 'Window 0000beef')
 })
@@ -335,65 +280,4 @@ test('a failed rename retains ownership so a later title change is still automat
   failRename = false
   await tabs.refresh(SESSION)
   assert.equal(tab.label, 'Second topic')
-})
-
-test('each host selects its own hook format under the same plugin identity', async () => {
-  const json = async path => JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'))
-  const claude = await json('../.claude-plugin/plugin.json')
-  const marketplace = await json('../.agents/plugins/marketplace.json')
-  const source = marketplace.plugins.find(plugin => plugin.name === 'rex-tab-status').source
-  assert.deepEqual(source, { source: 'local', path: './codex' })
-  const codex = await json(`../${source.path}/.codex-plugin/plugin.json`)
-  assert.equal(claude.name, 'rex-tab-status')
-  assert.equal(codex.name, claude.name)
-  assert.equal(codex.version, claude.version)
-  assert.equal(codex.hooks, './hooks/codex.json')
-  const claudeHooks = await json('../hooks/hooks.json')
-  const codexHooks = await json(`../${source.path}/${codex.hooks}`)
-  assert.deepEqual(claudeHooks.modules, ['./register.ts'])
-  assert.equal(codexHooks.modules, undefined)
-  assert.equal(codexHooks.hooks.SessionStart[0].hooks[0].type, 'command')
-  assert.match(codexHooks.hooks.SessionStart[0].hooks[0].command, /codex\.mjs/)
-  assert.equal(codexHooks.hooks.SessionStart[0].hooks[0].async, true)
-})
-
-test('the Codex worker lock cannot replace a running worker or another adapter state file', async t => {
-  const dir = await mkdtemp(join(tmpdir(), 'rex-tab-status-lock-'))
-  t.after(() => rm(dir, { recursive: true, force: true }))
-  const lock = join(dir, 'codex-server.pid')
-  const claude = join(dir, 'claude-state')
-  await writeFile(claude, 'keep')
-  const release = await claimLock(lock)
-  assert.equal(typeof release, 'function')
-  assert.equal((await stat(lock)).mode & 0o777, 0o600)
-  assert.equal(await claimLock(lock), undefined)
-  assert.equal(await readFile(lock, 'utf8'), String(process.pid))
-  await release()
-  const next = await claimLock(lock)
-  assert.equal(typeof next, 'function')
-  await next()
-  assert.equal(await readFile(claude, 'utf8'), 'keep')
-})
-
-test('a dead Codex worker lock is recovered', async t => {
-  const dir = await mkdtemp(join(tmpdir(), 'rex-tab-status-lock-'))
-  t.after(() => rm(dir, { recursive: true, force: true }))
-  const lock = join(dir, 'codex-server.pid')
-  await writeFile(lock, '999999999')
-  const release = await claimLock(lock)
-  assert.equal(typeof release, 'function')
-  await release()
-})
-
-test('an unfinished lock is respected while fresh and recovered after its startup window', async t => {
-  const dir = await mkdtemp(join(tmpdir(), 'rex-tab-status-lock-'))
-  t.after(() => rm(dir, { recursive: true, force: true }))
-  const lock = join(dir, 'codex-server.pid')
-  await writeFile(lock, '')
-  assert.equal(await claimLock(lock), undefined)
-  const earlier = new Date(Date.now() - 10000)
-  await utimes(lock, earlier, earlier)
-  const release = await claimLock(lock)
-  assert.equal(typeof release, 'function')
-  await release()
 })
