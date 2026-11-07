@@ -12,18 +12,35 @@ const WINDOW = 'window:w1'
 const TERMINAL = 'com.superlogical.terminal'
 
 function setup(label = 'Window 0000beef') {
-  const blocks = new Map([[BLOCK, {
-    title: '⠹ Fix login redirect | project',
-    foreground: { pid: 10, name: 'codex' },
-    records: [{ state: 'idle', app: 'codex', owner: { pid: 10, name: 'codex' } }],
-  }]])
+  const blocks = new Map([
+    [
+      BLOCK,
+      {
+        title: '⠹ Fix login redirect | project',
+        foreground: { pid: 10, name: 'codex' },
+        records: [{ state: 'idle', app: 'codex', owner: { pid: 10, name: 'codex' } }],
+      },
+    ],
+  ])
   const tab = { label }
   const calls = []
   const run = async args => {
     calls.push(args)
     const [noun, verb] = args
     if (noun === 'window' && verb === 'ls') {
-      return JSON.stringify({ windows: [{ window_id: WINDOW, label: tab.label, layers: [{ blocks: [...blocks.keys()].map(block_id => ({ block_id, creator_name: TERMINAL })) }] }] })
+      return JSON.stringify({
+        windows: [
+          {
+            window_id: WINDOW,
+            label: tab.label,
+            layers: [
+              {
+                blocks: [...blocks.keys()].map(block_id => ({ block_id, creator_name: TERMINAL })),
+              },
+            ],
+          },
+        ],
+      })
     }
     if (noun === 'window' && verb === 'rename') {
       tab.label = args.at(-1) || 'Window 0000beef'
@@ -44,12 +61,27 @@ function setup(label = 'Window 0000beef') {
 }
 
 function event(name, payload = {}) {
-  return { type: 'session_event', payload: { session_id: SESSION, event: { type: 'block_event', payload: { block_id: BLOCK, creator_name: TERMINAL, name, payload } } } }
+  return {
+    type: 'session_event',
+    payload: {
+      session_id: SESSION,
+      event: {
+        type: 'block_event',
+        payload: { block_id: BLOCK, creator_name: TERMINAL, name, payload },
+      },
+    },
+  }
 }
 
 test('Codex native status reports show active and completed states immediately', async () => {
   const { blocks, tab, tabs } = setup()
-  for (const [state, emoji] of [['working', '⏳'], ['blocked', '❓'], ['working', '⏳'], ['done', '✅'], ['error', '❌']]) {
+  for (const [state, emoji] of [
+    ['working', '⏳'],
+    ['blocked', '❓'],
+    ['working', '⏳'],
+    ['done', '✅'],
+    ['error', '❌'],
+  ]) {
     blocks.get(BLOCK).records[0].state = state
     await tabs.handle(event('program_status_changed'))
     assert.equal(tab.label, `${emoji} Fix login redirect | project`)
@@ -70,7 +102,10 @@ test('idle shows no emoji until five minutes pass without further events', async
   assert.equal(tab.label, '💤 Fix login redirect | project')
 })
 
-for (const [state, emoji] of [['done', '✅'], ['error', '❌']]) {
+for (const [state, emoji] of [
+  ['done', '✅'],
+  ['error', '❌'],
+]) {
   test(`${state} stays visible during the five-minute idle delay`, async t => {
     t.mock.timers.enable({ apis: ['setTimeout'] })
     const { blocks, tab, tabs } = setup()
@@ -213,7 +248,13 @@ test('a manual rename during a turn is preserved when Codex exits', async () => 
   const { blocks, tab, tabs } = setup()
   await tabs.refresh(SESSION)
   tab.label = 'deploy $(keep-this-literal)'
-  await tabs.handle({ type: 'session_event', payload: { session_id: SESSION, event: { type: 'window_label_changed', payload: { window_id: WINDOW, label: tab.label } } } })
+  await tabs.handle({
+    type: 'session_event',
+    payload: {
+      session_id: SESSION,
+      event: { type: 'window_label_changed', payload: { window_id: WINDOW, label: tab.label } },
+    },
+  })
   assert.equal(tab.label, 'deploy $(keep-this-literal)')
   blocks.get(BLOCK).foreground = { pid: 20, name: 'zsh' }
   await tabs.handle(event('process_changed'))
@@ -231,7 +272,11 @@ test('cleanup does not remove a prefix written by another adapter', async () => 
 test('Claude owns mixed split tabs during updates and cleanup', async () => {
   const { blocks, tab, tabs } = setup()
   await tabs.refresh(SESSION)
-  blocks.set('block:claude', { title: 'Claude task', foreground: { pid: 30, name: 'claude' }, records: [] })
+  blocks.set('block:claude', {
+    title: 'Claude task',
+    foreground: { pid: 30, name: 'claude' },
+    records: [],
+  })
   tab.label = '❓ Claude task'
   blocks.get(BLOCK).records[0].state = 'working'
   await tabs.handle(event('program_status_changed'))
@@ -243,7 +288,11 @@ test('Claude owns mixed split tabs during updates and cleanup', async () => {
 test('multiple Codex panes contribute to one tab status', async () => {
   const { blocks, tab, tabs } = setup()
   blocks.get(BLOCK).records[0].state = 'done'
-  blocks.set('block:b2', { title: 'Second pane', foreground: { pid: 20, name: 'codex' }, records: [{ state: 'blocked', app: 'codex' }] })
+  blocks.set('block:b2', {
+    title: 'Second pane',
+    foreground: { pid: 20, name: 'codex' },
+    records: [{ state: 'blocked', app: 'codex' }],
+  })
   await tabs.refresh(SESSION)
   assert.equal(tab.label, '❓ Fix login redirect | project')
   blocks.get('block:b2').records[0].state = 'working'
@@ -254,9 +303,15 @@ test('multiple Codex panes contribute to one tab status', async () => {
 test('an unreadable sibling process cannot expose a Claude label to Codex updates or cleanup', async () => {
   const { blocks, tab, run } = setup()
   let processFails = false
-  const tabs = new CodexTabs(args => processFails && args.at(-1) === 'process' ? undefined : run(args))
+  const tabs = new CodexTabs(args =>
+    processFails && args.at(-1) === 'process' ? undefined : run(args),
+  )
   await tabs.refresh(SESSION)
-  blocks.set('block:claude', { title: 'Claude task', foreground: { pid: 30, name: 'claude' }, records: [] })
+  blocks.set('block:claude', {
+    title: 'Claude task',
+    foreground: { pid: 30, name: 'claude' },
+    records: [],
+  })
   processFails = true
   const label = tab.label
   blocks.get(BLOCK).records[0].state = 'working'
@@ -269,7 +324,9 @@ test('an unreadable sibling process cannot expose a Claude label to Codex update
 test('a failed rename retains ownership so a later title change is still automatic', async () => {
   const { blocks, tab, run } = setup()
   let failRename = false
-  const tabs = new CodexTabs(args => failRename && args[0] === 'window' && args[1] === 'rename' ? undefined : run(args))
+  const tabs = new CodexTabs(args =>
+    failRename && args[0] === 'window' && args[1] === 'rename' ? undefined : run(args),
+  )
   await tabs.refresh(SESSION)
   failRename = true
   blocks.get(BLOCK).title = 'Second topic'

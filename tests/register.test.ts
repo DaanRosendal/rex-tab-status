@@ -8,7 +8,11 @@ const WINDOW = 'window:w1'
 
 type FakeRex = { label: string; title: string }
 
-function fakeRex(on: On, initialLabel = 'Window 0000beef', env: Record<string, string> = { REX_SESSION: SESSION, REX_BLOCK: BLOCK }): FakeRex {
+function fakeRex(
+  on: On,
+  initialLabel = 'Window 0000beef',
+  env: Record<string, string> = { REX_SESSION: SESSION, REX_BLOCK: BLOCK },
+): FakeRex {
   const rex: FakeRex = { label: initialLabel, title: 'Fix login redirect' }
   const ok = (stdout: string) => ({
     value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
@@ -20,12 +24,15 @@ function fakeRex(on: On, initialLabel = 'Window 0000beef', env: Record<string, s
     if (noun === 'window' && verb === 'ls') {
       return ok(
         JSON.stringify({
-          windows: [{ window_id: WINDOW, label: rex.label, layers: [{ blocks: [{ block_id: BLOCK }] }] }],
+          windows: [
+            { window_id: WINDOW, label: rex.label, layers: [{ blocks: [{ block_id: BLOCK }] }] },
+          ],
         }),
       )
     }
     if (noun === 'block' && verb === 'call') return ok(JSON.stringify({ title: rex.title }))
-    if (noun === 'session' && verb === 'inspect') return ok(JSON.stringify({ label: 'silent-glade' }))
+    if (noun === 'session' && verb === 'inspect')
+      return ok(JSON.stringify({ label: 'silent-glade' }))
     if (noun === 'window' && verb === 'rename') {
       const label = rest[rest.length - 1] ?? ''
       rex.label = label === '' ? 'Window 0000beef' : label
@@ -47,9 +54,20 @@ const END = { sessionId: 's', resume: {} as never }
 const done = (turnId: string, agentId?: string) =>
   ({ turnId, agentId, answer: '', durationMs: 1, isAborted: false, reason: 'answer' }) as const
 
-for (const [theme, icon] of [['ascii', '[..]'], ['minimal', '◐'], ['circles', '🟡'], [' Circles ', '🟡'], ['nope', '⏳'], ['', '⏳']] as const) {
+for (const [theme, icon] of [
+  ['ascii', '[..]'],
+  ['minimal', '◐'],
+  ['circles', '🟡'],
+  [' Circles ', '🟡'],
+  ['nope', '⏳'],
+  ['', '⏳'],
+] as const) {
   test(`REX_TAB_STATUS_THEME=${JSON.stringify(theme)} paints the working icon ${icon}`, async ($, on) => {
-    const rex = fakeRex(on, 'Window 0000beef', { REX_SESSION: SESSION, REX_BLOCK: BLOCK, REX_TAB_STATUS_THEME: theme })
+    const rex = fakeRex(on, 'Window 0000beef', {
+      REX_SESSION: SESSION,
+      REX_BLOCK: BLOCK,
+      REX_TAB_STATUS_THEME: theme,
+    })
     await $.session.start(START)
     await $.turn.start({ text: 'go', turnId: 't1' })
     expect(rex.label).toBe(`${icon} Fix login redirect`)
@@ -132,7 +150,11 @@ test('an interrupt and an error each show', async ($, on) => {
   expect(rex.label).toBe('❌ Fix login redirect')
 
   await $.turn.start({ text: 'once more', turnId: 't3' })
-  await $.turn.complete({ ...done('t3'), reason: 'refusal', refusal: { category: null, explanation: null } })
+  await $.turn.complete({
+    ...done('t3'),
+    reason: 'refusal',
+    refusal: { category: null, explanation: null },
+  })
   expect(rex.label).toBe('❌ Fix login redirect')
 })
 
@@ -157,7 +179,13 @@ test('an answered question goes back to working before its call returns', async 
   let labelAfterAnswer = ''
   on('ui.render', ($, e) => h($.ui.resolve(e).Text, {}, 'row'))
   on('tool.call', async (_, e) => {
-    const call = { tool_use_id: e.tool_use_id, tool: 'AskUserQuestion', input: {}, isErrored: false, isInterrupted: false }
+    const call = {
+      tool_use_id: e.tool_use_id,
+      tool: 'AskUserQuestion',
+      input: {},
+      isErrored: false,
+      isInterrupted: false,
+    }
     await $.ui.render({
       surface: 'terminal',
       component: 'ToolGroup',

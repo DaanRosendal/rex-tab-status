@@ -37,7 +37,9 @@ export class CodexTabs {
 
   refresh(session, blockId, windowId) {
     if (this.stopping) return this.painting
-    this.painting = this.painting.then(() => this.repaint(session, blockId, windowId)).catch(() => {})
+    this.painting = this.painting
+      .then(() => this.repaint(session, blockId, windowId))
+      .catch(() => {})
     return this.painting
   }
 
@@ -61,40 +63,56 @@ export class CodexTabs {
     const key = `${session}/${win.window_id}`
     const own = this.owned.get(key)
     const blocks = blocksOf(win).filter(b => !b.creator_name || b.creator_name === TERMINAL)
-    const reports = await Promise.all(blocks.map(async block => {
-      const [status, process, title] = await Promise.all([
-        this.run(['block', 'call', '-s', session, '-b', block.block_id, 'program_status']),
-        this.run(['block', 'call', '-s', session, '-b', block.block_id, 'process']),
-        this.run(['block', 'call', '-s', session, '-b', block.block_id, 'title']),
-      ])
-      const foreground = parse(process)?.foreground
-      const records = (parse(status)?.records ?? []).filter(r =>
-        (r.effective_app ?? r.app) === 'codex'
-        && Object.hasOwn(PRIORITY, r.state)
-        && (!r.owner || (r.owner.pid === foreground?.pid && r.owner.name === foreground?.name)),
-      )
-      const terminalTitle = parse(title)
-      const titleIsCurrent = !terminalTitle?.owner
-        || (terminalTitle.owner.pid === foreground?.pid && terminalTitle.owner.name === foreground?.name)
-      const text = typeof terminalTitle?.title === 'string' ? terminalTitle.title : ''
-      this.titles.set(`${session}/${block.block_id}`, titleSignature(text))
-      return {
-        block: block.block_id,
-        foreground,
-        records,
-        processKnown: parse(process) !== undefined,
-        needsInput: titleIsCurrent && ACTION_REQUIRED.test(text),
-      }
-    }))
+    const reports = await Promise.all(
+      blocks.map(async block => {
+        const [status, process, title] = await Promise.all([
+          this.run(['block', 'call', '-s', session, '-b', block.block_id, 'program_status']),
+          this.run(['block', 'call', '-s', session, '-b', block.block_id, 'process']),
+          this.run(['block', 'call', '-s', session, '-b', block.block_id, 'title']),
+        ])
+        const foreground = parse(process)?.foreground
+        const records = (parse(status)?.records ?? []).filter(
+          r =>
+            (r.effective_app ?? r.app) === 'codex' &&
+            Object.hasOwn(PRIORITY, r.state) &&
+            (!r.owner || (r.owner.pid === foreground?.pid && r.owner.name === foreground?.name)),
+        )
+        const terminalTitle = parse(title)
+        const titleIsCurrent =
+          !terminalTitle?.owner ||
+          (terminalTitle.owner.pid === foreground?.pid &&
+            terminalTitle.owner.name === foreground?.name)
+        const text = typeof terminalTitle?.title === 'string' ? terminalTitle.title : ''
+        this.titles.set(`${session}/${block.block_id}`, titleSignature(text))
+        return {
+          block: block.block_id,
+          foreground,
+          records,
+          processKnown: parse(process) !== undefined,
+          needsInput: titleIsCurrent && ACTION_REQUIRED.test(text),
+        }
+      }),
+    )
 
     // Claude's function hooks own the label while Claude shares this tab.
-    if (reports.some(r => !r.processKnown || ['claude', 'claude-code'].includes(r.foreground?.name))) return
+    if (
+      reports.some(r => !r.processKnown || ['claude', 'claude-code'].includes(r.foreground?.name))
+    )
+      return
 
     const candidates = reports.filter(r => r.records.length > 0)
     if (candidates.length === 0) {
       own?.idle.cancel()
       if (own && win.label === own.label && blocks.length > 0) {
-        await paintTab(this.run, { session, block: blocks[0].block_id, status: 'idle', ownName: own.name, isEnding: true, windows: [win], icons: this.icons })
+        await paintTab(this.run, {
+          session,
+          block: blocks[0].block_id,
+          status: 'idle',
+          ownName: own.name,
+          isEnding: true,
+          windows: [win],
+          icons: this.icons,
+        })
       }
       this.owned.delete(key)
       return
@@ -103,10 +121,17 @@ export class CodexTabs {
     const block = candidates[0].block
     const status = candidates.some(c => c.needsInput)
       ? 'blocked'
-      : candidates.flatMap(c => c.records).reduce((state, r) => PRIORITY[r.state] > PRIORITY[state] ? r.state : state, 'idle')
-    const owners = candidates.map(c => `${c.block}/${c.foreground?.pid}/${c.foreground?.name}`).join(',')
+      : candidates
+          .flatMap(c => c.records)
+          .reduce((state, r) => (PRIORITY[r.state] > PRIORITY[state] ? r.state : state), 'idle')
+    const owners = candidates
+      .map(c => `${c.block}/${c.foreground?.pid}/${c.foreground?.name}`)
+      .join(',')
     if (own && own.owners !== owners) own.idle.cancel()
-    const idle = own?.owners === owners ? own.idle : new IdleDelay(() => this.refresh(session, undefined, win.window_id))
+    const idle =
+      own?.owners === owners
+        ? own.idle
+        : new IdleDelay(() => this.refresh(session, undefined, win.window_id))
     const result = await paintTab(this.run, {
       session,
       block,
@@ -116,18 +141,27 @@ export class CodexTabs {
       formatTitle: cleanTitle,
       icons: this.icons,
     })
-    this.owned.set(key, { session, window: win.window_id, name: result.ownName, label: result.label, idle, owners })
+    this.owned.set(key, {
+      session,
+      window: win.window_id,
+      name: result.ownName,
+      label: result.label,
+      idle,
+      owners,
+    })
   }
 
   async handle(event) {
     if (event?.type === 'session_destroyed') {
       const session = event.payload?.session_id
       if (typeof session !== 'string') return
-      for (const [key, own] of this.owned) if (own.session === session) {
-        own.idle.cancel()
-        this.owned.delete(key)
-      }
-      for (const key of this.titles.keys()) if (key.startsWith(`${session}/`)) this.titles.delete(key)
+      for (const [key, own] of this.owned)
+        if (own.session === session) {
+          own.idle.cancel()
+          this.owned.delete(key)
+        }
+      for (const key of this.titles.keys())
+        if (key.startsWith(`${session}/`)) this.titles.delete(key)
       return
     }
     if (event?.type === 'session_created') {
@@ -146,14 +180,24 @@ export class CodexTabs {
         const title = titleSignature(payload.title)
         if (this.titles.get(`${session}/${block}`) === title) return
         this.titles.set(`${session}/${block}`, title)
-      } else if (!['program_status_changed', 'program_status_removed', 'process_changed', 'child_exited'].includes(name)) return
+      } else if (
+        ![
+          'program_status_changed',
+          'program_status_removed',
+          'process_changed',
+          'child_exited',
+        ].includes(name)
+      )
+        return
       await this.refresh(session, block)
     } else if (change.type === 'window_label_changed') {
       const { window_id: window, label } = change.payload ?? {}
-      if (typeof window !== 'string' || this.owned.get(`${session}/${window}`)?.label === label) return
+      if (typeof window !== 'string' || this.owned.get(`${session}/${window}`)?.label === label)
+        return
       await this.refresh(session, undefined, window)
     } else if (['block_created', 'block_closed', 'session_label_changed'].includes(change.type)) {
-      if (change.type === 'block_closed') this.titles.delete(`${session}/${change.payload?.block_id}`)
+      if (change.type === 'block_closed')
+        this.titles.delete(`${session}/${change.payload?.block_id}`)
       await this.refresh(session)
     }
   }
@@ -163,13 +207,34 @@ export class CodexTabs {
     await this.painting
     for (const own of [...this.owned.values()]) {
       own.idle.cancel()
-      const windows = parseWindows(await this.run(['window', 'ls', '-s', own.session, '--json'])) ?? []
+      const windows =
+        parseWindows(await this.run(['window', 'ls', '-s', own.session, '--json'])) ?? []
       const win = windows.find(w => w.window_id === own.window)
       if (!win || win.label !== own.label) continue
       const blocks = blocksOf(win)
-      const processes = await Promise.all(blocks.map(b => this.run(['block', 'call', '-s', own.session, '-b', b.block_id, 'process'])))
-      if (processes.some(p => parse(p) === undefined || ['claude', 'claude-code'].includes(parse(p)?.foreground?.name))) continue
-      if (blocks.length > 0) await paintTab(this.run, { session: own.session, block: blocks[0].block_id, status: 'idle', ownName: own.name, isEnding: true, windows: [win], icons: this.icons })
+      const processes = await Promise.all(
+        blocks.map(b =>
+          this.run(['block', 'call', '-s', own.session, '-b', b.block_id, 'process']),
+        ),
+      )
+      if (
+        processes.some(
+          p =>
+            parse(p) === undefined ||
+            ['claude', 'claude-code'].includes(parse(p)?.foreground?.name),
+        )
+      )
+        continue
+      if (blocks.length > 0)
+        await paintTab(this.run, {
+          session: own.session,
+          block: blocks[0].block_id,
+          status: 'idle',
+          ownName: own.name,
+          isEnding: true,
+          windows: [win],
+          icons: this.icons,
+        })
     }
     this.owned.clear()
   }
@@ -182,7 +247,9 @@ function rexArgs(server, args) {
 function runner(server) {
   return async args => {
     try {
-      return (await exec('rex', rexArgs(server, args), { timeout: 2500, maxBuffer: 4 * 1024 * 1024 })).stdout
+      return (
+        await exec('rex', rexArgs(server, args), { timeout: 2500, maxBuffer: 4 * 1024 * 1024 })
+      ).stdout
     } catch {
       return undefined
     }
@@ -196,7 +263,8 @@ export async function claimLock(path) {
       await file.writeFile(String(process.pid))
       await file.close()
       return async () => {
-        if (await readFile(path, 'utf8').catch(() => '') === String(process.pid)) await unlink(path).catch(() => {})
+        if ((await readFile(path, 'utf8').catch(() => '')) === String(process.pid))
+          await unlink(path).catch(() => {})
       }
     } catch (error) {
       if (error.code !== 'EEXIST') throw error
@@ -219,7 +287,9 @@ export async function claimLock(path) {
 }
 
 async function watch(server, instance) {
-  const data = process.env.PLUGIN_DATA ?? join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'plugins', 'data', 'rex-tab-status')
+  const data =
+    process.env.PLUGIN_DATA ??
+    join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'plugins', 'data', 'rex-tab-status')
   await mkdir(data, { recursive: true, mode: 0o700 })
   const key = createHash('sha256').update(`${server}/${instance}`).digest('hex').slice(0, 16)
   const release = await claimLock(join(data, `codex-${key}.pid`))
@@ -227,7 +297,9 @@ async function watch(server, instance) {
 
   const run = runner(server)
   const tabs = new CodexTabs(run, resolveTheme(process.env.REX_TAB_STATUS_THEME))
-  const events = spawn('rex', rexArgs(server, ['events', '--all', '--json']), { stdio: ['ignore', 'pipe', 'ignore'] })
+  const events = spawn('rex', rexArgs(server, ['events', '--all', '--json']), {
+    stdio: ['ignore', 'pipe', 'ignore'],
+  })
   const lines = createInterface({ input: events.stdout })
   const input = lines[Symbol.asyncIterator]()
   const stop = () => events.kill('SIGTERM')
@@ -236,7 +308,8 @@ async function watch(server, instance) {
   events.on('error', () => lines.close())
   try {
     const sessions = parse(await run(['ls', '--json']))?.sessions ?? []
-    for (const session of sessions) if (typeof session?.session_id === 'string') await tabs.refresh(session.session_id)
+    for (const session of sessions)
+      if (typeof session?.session_id === 'string') await tabs.refresh(session.session_id)
     for await (const line of input) {
       try {
         await tabs.handle(parse(line))
@@ -257,7 +330,10 @@ async function main() {
   if (!process.env.REX_SESSION && !process.env.REX_BLOCK && !process.env.REX_SERVER) return
   const info = parse(await runner()(['whoami', '--json']))
   if (!info?.endpoint || !info?.instance_id) return
-  const child = spawn(process.execPath, [filename, 'watch', info.endpoint, info.instance_id], { detached: true, stdio: 'ignore' })
+  const child = spawn(process.execPath, [filename, 'watch', info.endpoint, info.instance_id], {
+    detached: true,
+    stdio: 'ignore',
+  })
   child.unref()
 }
 
