@@ -45,7 +45,9 @@ codex plugin marketplace add https://github.com/DaanRosendal/rex-tab-status.git
 codex plugin add rex-tab-status@rex-tab-status
 ```
 
-Start a new Codex session and review the plugin's hook in `/hooks`. The hook starts one background watcher per Rex server. It listens only to Codex's native program status reports, including permission prompts, questions, and errors. It does not connect to a model or read conversation transcripts.
+Start a new Codex session and review the plugin's hook in `/hooks`. The hook starts one background watcher per Rex server. It follows Rex's terminal events (Codex's status reports, titles, and processes). It does not connect to a model or read conversation transcripts.
+
+The watcher keeps running after the Codex session ends, until Rex exits. To stop it, run `pkill -f 'codex.mjs watch'`. It restores the tab labels on the way out.
 
 Codex can leave its native status at working while an async question waits. The watcher also recognizes Codex's `Action Required` title marker so those questions show ❓ until answered.
 
@@ -71,7 +73,7 @@ For Claude Code, set the variable in `~/.claude/settings.json`:
 { "env": { "REX_TAB_STATUS_THEME": "ascii" } }
 ```
 
-Codex reads it when its background watcher starts. After changing it, quit the watcher or restart Rex so the next Codex session starts a new one. Tabs painted under another theme are cleaned up either way, because every theme's icons are stripped from the label.
+Codex reads it when its watcher starts, so stop the watcher after changing it (see Codex above). Tabs painted under another theme are cleaned up either way.
 
 A tab name that starts with one of these icons and a space, such as `[ok] notes`, loses that prefix when the plugin repaints the tab.
 
@@ -80,8 +82,7 @@ A tab name that starts with one of these icons and a space, such as `[ok] notes`
 ```bash
 claude plugin validate .
 claude plugin test .
-node --test tests/codex.test.mjs
-node --test tests/themes.test.mjs
+node --test tests/codex.test.mjs tests/themes.test.mjs tests/watcher.test.mjs
 node --test tests/rex-integration.test.mjs
 ```
 
