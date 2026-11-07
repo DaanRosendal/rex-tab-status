@@ -6,13 +6,13 @@ import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { paintTab, parse } from './rex.ts'
+import { paintTab, parse, resolveTheme } from './rex.ts'
 import { IdleDelay } from './idle.mjs'
 
 const exec = promisify(execFile)
 const PRIORITY = { idle: 0, done: 1, error: 2, working: 3, blocked: 4 }
 const TERMINAL = 'com.superlogical.terminal'
-// Codex marks async questions in its title while OSC 7501 can stay working.
+// Codex marks an async question in the terminal title while its status report can stay at working.
 const ACTION_REQUIRED = /^\[ [!.] \] Action Required(?: \| |$)/
 const filename = fileURLToPath(import.meta.url)
 
@@ -30,8 +30,9 @@ export class CodexTabs {
   painting = Promise.resolve()
   stopping = false
 
-  constructor(run) {
+  constructor(run, icons = resolveTheme(undefined)) {
     this.run = run
+    this.icons = icons
   }
 
   refresh(session, blockId, windowId) {
@@ -94,7 +95,7 @@ export class CodexTabs {
     if (candidates.length === 0) {
       own?.idle.cancel()
       if (own && win.label === own.label && blocks.length > 0) {
-        await paintTab(this.run, { session, block: blocks[0].block_id, status: 'idle', ownName: own.name, isEnding: true, windows: [win] })
+        await paintTab(this.run, { session, block: blocks[0].block_id, status: 'idle', ownName: own.name, isEnding: true, windows: [win], icons: this.icons })
       }
       this.owned.delete(key)
       return
@@ -114,6 +115,7 @@ export class CodexTabs {
       ownName: own?.name,
       windows: [win],
       formatTitle: cleanTitle,
+      icons: this.icons,
     })
     this.owned.set(key, { session, window: win.window_id, name: result.ownName, label: result.label, idle, owners })
   }
@@ -168,7 +170,7 @@ export class CodexTabs {
       const blocks = win.layers.flatMap(l => l.blocks)
       const processes = await Promise.all(blocks.map(b => this.run(['block', 'call', '-s', own.session, '-b', b.block_id, 'process'])))
       if (processes.some(p => parse(p) === undefined || ['claude', 'claude-code'].includes(parse(p)?.foreground?.name))) continue
-      if (blocks.length > 0) await paintTab(this.run, { session: own.session, block: blocks[0].block_id, status: 'idle', ownName: own.name, isEnding: true, windows: [win] })
+      if (blocks.length > 0) await paintTab(this.run, { session: own.session, block: blocks[0].block_id, status: 'idle', ownName: own.name, isEnding: true, windows: [win], icons: this.icons })
     }
     this.owned.clear()
   }
@@ -225,7 +227,7 @@ async function watch(server, instance) {
   if (!release) return
 
   const run = runner(server)
-  const tabs = new CodexTabs(run)
+  const tabs = new CodexTabs(run, resolveTheme(process.env.REX_TAB_STATUS_THEME))
   const events = spawn('rex', rexArgs(server, ['events', '--all', '--json']), { stdio: ['ignore', 'pipe', 'ignore'] })
   const lines = createInterface({ input: events.stdout })
   const stop = () => events.kill('SIGTERM')

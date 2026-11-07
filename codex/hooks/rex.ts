@@ -2,15 +2,31 @@ export type Status = 'ready' | 'idle' | 'working' | 'blocked' | 'done' | 'error'
 export type RunRex = (args: string[]) => Promise<string | undefined>
 export type RexWindow = { window_id: string; label: string; layers: { blocks: { block_id: string }[] }[] }
 
-const EMOJI: Record<Status, string> = {
-  ready: '',
-  idle: '💤',
-  working: '⏳',
-  blocked: '❓',
-  done: '✅',
-  error: '❌',
+export type Icons = Record<Status, string>
+
+// Never remove an icon from a preset: tabs already showing it could no longer be cleaned.
+export const THEMES = {
+  default: { ready: '', idle: '💤', working: '⏳', blocked: '❓', done: '✅', error: '❌' },
+  ascii: { ready: '', idle: '[zz]', working: '[..]', blocked: '[?]', done: '[ok]', error: '[x]' },
+  minimal: { ready: '', idle: '○', working: '◐', blocked: '◆', done: '✓', error: '✗' },
+  circles: { ready: '', idle: '⚪', working: '🟡', blocked: '🔴', done: '🟢', error: '⛔' },
+} as const satisfies Record<string, Icons>
+
+export type ThemeName = keyof typeof THEMES
+
+export function resolveTheme(name: string | undefined): Icons {
+  const key = (name ?? '').trim().toLowerCase()
+  return Object.hasOwn(THEMES, key) ? THEMES[key as ThemeName] : THEMES.default
 }
-const PREFIX = /^(💤|⏳|❓|✅|❌) /
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const PREFIX = new RegExp(
+  `^(${[...new Set(Object.values(THEMES).flatMap(icons => Object.values(icons)))]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegExp)
+    .join('|')}) `,
+)
 const REX_DEFAULT_LABEL = /^Window [0-9a-f]+$/
 
 export function parse(text: string | undefined): any {
@@ -38,9 +54,11 @@ export async function paintTab(
     isEnding?: boolean
     windows?: RexWindow[]
     formatTitle?: (title: string) => string
+    icons?: Icons
   },
 ): Promise<{ ownName?: string; label?: string }> {
   const { session, block, status, ownName, isEnding } = options
+  const icons = options.icons ?? THEMES.default
   const windows: RexWindow[] = options.windows ?? parse(await run(['window', 'ls', '-s', session, '--json']))?.windows ?? []
   const win = windows.find(w => w.layers.some(l => l.blocks.some(b => b.block_id === block)))
   if (!win) return { ownName }
@@ -61,7 +79,7 @@ export async function paintTab(
       || bare
   }
 
-  const label = EMOJI[status] ? `${EMOJI[status]} ${name}` : name
+  const label = icons[status] ? `${icons[status]} ${name}` : name
   if (label !== win.label && await run(['window', 'rename', '-s', session, '--', win.window_id, label]) === undefined) {
     return { ownName, label: win.label }
   }

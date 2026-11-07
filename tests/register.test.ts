@@ -47,6 +47,15 @@ const END = { sessionId: 's', resume: {} as never }
 const done = (turnId: string, agentId?: string) =>
   ({ turnId, agentId, answer: '', durationMs: 1, isAborted: false, reason: 'answer' }) as const
 
+for (const [theme, icon] of [['ascii', '[..]'], ['minimal', '◐'], ['circles', '🟡'], [' Circles ', '🟡'], ['nope', '⏳'], ['', '⏳']] as const) {
+  test(`REX_TAB_STATUS_THEME=${JSON.stringify(theme)} paints the working icon ${icon}`, async ($, on) => {
+    const rex = fakeRex(on, 'Window 0000beef', { REX_SESSION: SESSION, REX_BLOCK: BLOCK, REX_TAB_STATUS_THEME: theme })
+    await $.session.start(START)
+    await $.turn.start({ text: 'go', turnId: 't1' })
+    expect(rex.label).toBe(`${icon} Fix login redirect`)
+  })
+}
+
 test('idle changes to sleeping only after five minutes without another hook event', async ($, on) => {
   const clock = mock.clock(on)
   const rex = fakeRex(on)
