@@ -14,8 +14,12 @@ const skip =
 const plugin = fileURLToPath(new URL('../codex/hooks/watcher.mjs', import.meta.url))
 const fixture = fileURLToPath(new URL('./fixtures/codex-terminal.mjs', import.meta.url))
 
+const TEST_TIMEOUT_MS = 45000
+const EVENTUALLY_TIMEOUT_MS = 8000
+const POLL_INTERVAL_MS = 50
+
 async function eventually(check) {
-  const deadline = Date.now() + 8000
+  const deadline = Date.now() + EVENTUALLY_TIMEOUT_MS
   let error
   while (Date.now() < deadline) {
     try {
@@ -23,7 +27,7 @@ async function eventually(check) {
       return
     } catch (e) {
       error = e
-      await setTimeout(50)
+      await setTimeout(POLL_INTERVAL_MS)
     }
   }
   throw error
@@ -31,8 +35,9 @@ async function eventually(check) {
 
 test(
   'the installed watcher follows real Rex events and restores labels on shutdown',
-  { timeout: 45000, skip },
+  { timeout: TEST_TIMEOUT_MS, skip },
   async () => {
+    // Unix socket paths are limited to about 100 characters, which os.tmpdir() exceeds on macOS.
     const dir = await mkdtemp('/tmp/rex-tab-status-test-')
     const endpoint = `unix://${dir}/server.sock`
     const data = join(dir, 'codex-data')
@@ -115,7 +120,8 @@ test(
         await eventually(async () => assert.equal(await label(), `${emoji} Codex integration test`))
       }
       await send({ state: 'idle' })
-      assert.equal(await label(), '❌ Codex integration test')
+      await send({ titleOnly: true, title: '⠹ After idle' })
+      await eventually(async () => assert.equal(await label(), '❌ After idle'))
       await send({ state: 'working', title: '⠹ New topic' })
       await eventually(async () => assert.equal(await label(), '⏳ New topic'))
       await send({ titleOnly: true, title: '[ ! ] Action Required | New topic' })
@@ -144,7 +150,7 @@ test(
         watcher.kill('SIGTERM')
         await exited
       }
-      if (started) await run(['server', 'stop'])
+      if (started) await run(['server', 'stop']).catch(() => {})
       await rm(dir, { recursive: true, force: true })
     }
   },

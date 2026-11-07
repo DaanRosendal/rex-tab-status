@@ -12,7 +12,7 @@
     "node": ">=22.18.0"
   },
   "scripts": {
-    "test": "node --test tests/codex.test.mjs tests/themes.test.mjs tests/watcher.test.mjs",
+    "test": "node --test tests/tabs.test.mjs tests/themes.test.mjs tests/watcher.test.mjs tests/lock.test.mjs tests/manifest.test.mjs",
     "test:plugin": "claude plugin test .",
     "test:integration": "node --test tests/rex-integration.test.mjs",
     "validate": "claude plugin validate .",
