@@ -46,7 +46,7 @@ test(
           timeout: 5000,
         })
       ).stdout
-    let worker
+    let watcher
     let exited
     let started = false
     try {
@@ -84,15 +84,15 @@ test(
         await run(['send-key', '-s', session, '-b', block, 'enter'])
       }
 
-      worker = spawn(process.execPath, [plugin, 'watch', endpoint, info.instance_id], {
+      watcher = spawn(process.execPath, [plugin, 'watch', endpoint, info.instance_id], {
         env,
         stdio: ['ignore', 'ignore', 'pipe'],
       })
       let errors = ''
-      worker.stderr.on('data', chunk => {
+      watcher.stderr.on('data', chunk => {
         errors += chunk
       })
-      exited = once(worker, 'exit')
+      exited = once(watcher, 'exit')
       await eventually(async () => assert.equal(await label(), 'Codex integration test'))
 
       const startEnv = { ...env, REX_SESSION: 'session:obsolete' }
@@ -102,7 +102,7 @@ test(
       ])
       const locks = (await readdir(data)).filter(name => name.endsWith('.pid'))
       assert.equal(locks.length, 1)
-      assert.equal(await readFile(join(data, locks[0]), 'utf8'), String(worker.pid))
+      assert.equal(await readFile(join(data, locks[0]), 'utf8'), String(watcher.pid))
 
       for (const [state, emoji] of [
         ['working', '⏳'],
@@ -133,15 +133,15 @@ test(
       await send({ state: 'done' })
       await eventually(async () => assert.equal(await label(), `✅ ${custom}`))
 
-      worker.kill('SIGTERM')
+      watcher.kill('SIGTERM')
       const [code] = await exited
-      worker = undefined
+      watcher = undefined
       assert.equal(code, 0, errors)
       assert.equal(await label(), custom)
       assert.equal(errors, '')
     } finally {
-      if (worker) {
-        worker.kill('SIGTERM')
+      if (watcher) {
+        watcher.kill('SIGTERM')
         await exited
       }
       if (started) await run(['server', 'stop'])
