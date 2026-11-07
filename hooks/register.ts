@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { paintTab, type Status } from '../codex/hooks/rex.ts'
+import { paintTab, resolveTheme, type Status } from '../codex/hooks/rex.ts'
 import { IdleDelay } from '../codex/hooks/idle.mjs'
 
 let status: Status = 'idle'
@@ -46,6 +46,7 @@ async function repaint($: EngineInterface, isEnding: boolean, displayed: Status)
     status: displayed,
     ownName: typeof ownName === 'string' ? ownName : undefined,
     isEnding,
+    icons: resolveTheme(await $.env.get('REX_TAB_STATUS_THEME')),
   })
   if (name !== undefined) await $.store.set(nameKey, name)
   else await $.store.delete(nameKey)

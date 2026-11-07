@@ -51,12 +51,37 @@ Codex can leave its native status at working while an async question waits. The 
 
 Both hosts use the same repository and plugin name. Claude loads `hooks/hooks.json` and its function hooks. Codex's marketplace installs only `codex/`, keeping Git metadata and tests out of the bundle it fingerprints at startup. Its manifest selects `hooks/codex.json` and its background command hook. Both adapters use `codex/hooks/rex.ts` to update labels.
 
+## Themes
+
+Set `REX_TAB_STATUS_THEME` to change the icons. An unknown or empty value uses `default`.
+
+| State | `default` | `ascii` | `minimal` | `circles` |
+| --- | --- | --- | --- | --- |
+| idle | 💤 | `[zz]` | ○ | ⚪ |
+| working | ⏳ | `[..]` | ◐ | 🟡 |
+| needs you | ❓ | `[?]` | ◆ | 🔴 |
+| done | ✅ | `[ok]` | ✓ | 🟢 |
+| error | ❌ | `[x]` | ✗ | ⛔ |
+
+`ascii` suits terminals and fonts without emoji. `circles` tells the states apart by color alone.
+
+For Claude Code, set the variable in `~/.claude/settings.json`:
+
+```json
+{ "env": { "REX_TAB_STATUS_THEME": "ascii" } }
+```
+
+Codex reads it when its background watcher starts. After changing it, quit the watcher or restart Rex so the next Codex session starts a new one. Tabs painted under another theme are cleaned up either way, because every theme's icons are stripped from the label.
+
+A tab name that starts with one of these icons and a space, such as `[ok] notes`, loses that prefix when the plugin repaints the tab.
+
 ## Develop
 
 ```bash
 claude plugin validate .
 claude plugin test .
 node --test tests/codex.test.mjs
+node --test tests/themes.test.mjs
 node --test tests/rex-integration.test.mjs
 ```
 
