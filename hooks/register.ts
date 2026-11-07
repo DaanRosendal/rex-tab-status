@@ -60,7 +60,10 @@ function paint($: EngineInterface, isEnding = false): Promise<void> {
     idle?.cancel()
     idle = undefined
   } else {
-    idle ??= new IdleDelay(() => paint($), (ms, callback) => $.clock.after(ms, callback))
+    idle ??= new IdleDelay(
+      () => paint($),
+      (ms, callback) => $.clock.after(ms, callback),
+    )
   }
   const displayed = idle ? idle.update(current) : current
   painting = painting.then(() => repaint($, isEnding, displayed)).catch(() => {})
@@ -98,7 +101,8 @@ export const register: Register = on => {
     if (e.agentId === undefined) {
       isMainTurnRunning = false
       pendingAsks.clear()
-      status = e.reason === 'error' || e.reason === 'refusal' ? 'error' : e.isAborted ? 'idle' : 'done'
+      status =
+        e.reason === 'error' || e.reason === 'refusal' ? 'error' : e.isAborted ? 'idle' : 'done'
     } else {
       runningAgentTurns.delete(e.turnId)
       if (!isMainTurnRunning && status === 'working') status = 'done'

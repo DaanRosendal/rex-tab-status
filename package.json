@@ -2,7 +2,9 @@
   "name": "rex-tab-status",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.18.0" },
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
     "test:codex": "node --test tests/codex.test.mjs",
     "test:themes": "node --test tests/themes.test.mjs",

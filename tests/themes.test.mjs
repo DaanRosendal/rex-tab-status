@@ -13,7 +13,11 @@ function fakeRex(label = 'Window 0000beef') {
   const run = async args => {
     const [noun, verb] = args
     if (noun === 'window' && verb === 'ls') {
-      return JSON.stringify({ windows: [{ window_id: WINDOW, label: tab.label, layers: [{ blocks: [{ block_id: BLOCK }] }] }] })
+      return JSON.stringify({
+        windows: [
+          { window_id: WINDOW, label: tab.label, layers: [{ blocks: [{ block_id: BLOCK }] }] },
+        ],
+      })
     }
     if (noun === 'window' && verb === 'rename') {
       tab.label = args.at(-1) || 'Window 0000beef'
@@ -41,12 +45,17 @@ test('every theme defines all five states, none empty', () => {
 })
 
 test('no icon collides with another icon in the same or another theme', () => {
-  const all = Object.entries(THEMES).flatMap(([theme, icons]) => STATES.map(state => ({ id: `${theme}.${state}`, icon: icons[state] })))
+  const all = Object.entries(THEMES).flatMap(([theme, icons]) =>
+    STATES.map(state => ({ id: `${theme}.${state}`, icon: icons[state] })),
+  )
   for (const a of all) {
     for (const b of all) {
       if (a.id === b.id) continue
       if (a.icon === b.icon) assert.fail(`${a.id} and ${b.id} share ${a.icon}`)
-      assert.ok(!b.icon.startsWith(a.icon), `${a.id} (${a.icon}) is a prefix of ${b.id} (${b.icon})`)
+      assert.ok(
+        !b.icon.startsWith(a.icon),
+        `${a.id} (${a.icon}) is a prefix of ${b.id} (${b.icon})`,
+      )
     }
   }
 })
@@ -83,8 +92,19 @@ test('switching themes replaces the old prefix instead of stacking', async () =>
   for (const from of Object.keys(THEMES)) {
     for (const to of Object.keys(THEMES)) {
       const { tab, run } = fakeRex()
-      const first = await paintTab(run, { session: SESSION, block: BLOCK, status: 'working', icons: THEMES[from] })
-      await paintTab(run, { session: SESSION, block: BLOCK, status: 'done', icons: THEMES[to], ownName: first.ownName })
+      const first = await paintTab(run, {
+        session: SESSION,
+        block: BLOCK,
+        status: 'working',
+        icons: THEMES[from],
+      })
+      await paintTab(run, {
+        session: SESSION,
+        block: BLOCK,
+        status: 'done',
+        icons: THEMES[to],
+        ownName: first.ownName,
+      })
       assert.equal(tab.label, `${THEMES[to].done} Fix login redirect`, `${from} -> ${to}`)
     }
   }
@@ -94,7 +114,14 @@ test('ending strips the prefix of any theme and restores the automatic name', as
   for (const [name, icons] of Object.entries(THEMES)) {
     const { tab, run } = fakeRex()
     const painted = await paintTab(run, { session: SESSION, block: BLOCK, status: 'done', icons })
-    await paintTab(run, { session: SESSION, block: BLOCK, status: 'idle', icons: THEMES.default, ownName: painted.ownName, isEnding: true })
+    await paintTab(run, {
+      session: SESSION,
+      block: BLOCK,
+      status: 'idle',
+      icons: THEMES.default,
+      ownName: painted.ownName,
+      isEnding: true,
+    })
     assert.equal(tab.label, 'Window 0000beef', name)
   }
 })
@@ -102,7 +129,13 @@ test('ending strips the prefix of any theme and restores the automatic name', as
 test('a hand-named tab keeps its name when any theme ends', async () => {
   for (const [name, icons] of Object.entries(THEMES)) {
     const { tab, run } = fakeRex(`${icons.working} deploy`)
-    await paintTab(run, { session: SESSION, block: BLOCK, status: 'idle', icons: THEMES.default, isEnding: true })
+    await paintTab(run, {
+      session: SESSION,
+      block: BLOCK,
+      status: 'idle',
+      icons: THEMES.default,
+      isEnding: true,
+    })
     assert.equal(tab.label, 'deploy', name)
   }
 })
@@ -120,7 +153,13 @@ test('CodexTabs paints with the theme it was given and defaults to emoji', async
     const { tab, run } = fakeRex()
     const tabs = new CodexTabs(run, icons)
     const windows = JSON.parse(await run(['window', 'ls', '-s', SESSION, '--json'])).windows
-    const result = await paintTab(run, { session: SESSION, block: BLOCK, status: 'working', icons: tabs.icons, windows })
+    const result = await paintTab(run, {
+      session: SESSION,
+      block: BLOCK,
+      status: 'working',
+      icons: tabs.icons,
+      windows,
+    })
     assert.equal(result.label, `${(icons ?? THEMES.default).working} Fix login redirect`, name)
     assert.equal(tab.label, result.label)
   }

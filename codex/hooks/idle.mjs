@@ -26,10 +26,16 @@ export class IdleDelay {
       this.timer = this.schedule(IDLE_DELAY_MS, () => {
         this.timer = undefined
         this.expired = true
-        return Promise.resolve().then(this.repaint).catch(() => {})
+        return Promise.resolve()
+          .then(this.repaint)
+          .catch(() => {})
       })
     }
-    return this.expired ? 'idle' : ['done', 'error'].includes(this.previous) ? this.previous : 'ready'
+    return this.expired
+      ? 'idle'
+      : ['done', 'error'].includes(this.previous)
+        ? this.previous
+        : 'ready'
   }
 
   cancel() {
