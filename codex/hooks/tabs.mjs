@@ -7,6 +7,16 @@ const TERMINAL = 'com.superlogical.terminal'
 // Codex marks an async question in the terminal title while its status report can stay at working.
 const ACTION_REQUIRED = /^\[ [!.] \] Action Required(?: \| |$)/
 
+const CLAUDE_NAMES = ['claude', 'claude-code']
+
+function isClaude(foreground) {
+  return CLAUDE_NAMES.includes(foreground?.name)
+}
+
+function isForeground(owner, foreground) {
+  return owner.pid === foreground?.pid && owner.name === foreground?.name
+}
+
 function cleanTitle(title) {
   return title.replace(/^[\u2800-\u28ff]\s+/u, '').replace(ACTION_REQUIRED, '')
 }
@@ -56,40 +66,36 @@ export class CodexTabs {
     const blocks = blocksOf(win).filter(b => !b.creator_name || b.creator_name === TERMINAL)
     const reports = await Promise.all(
       blocks.map(async block => {
-        const [status, process, title] = await Promise.all([
+        const [statusText, processText, titleText] = await Promise.all([
           this.run(['block', 'call', '-s', session, '-b', block.block_id, 'program_status']),
           this.run(['block', 'call', '-s', session, '-b', block.block_id, 'process']),
           this.run(['block', 'call', '-s', session, '-b', block.block_id, 'title']),
         ])
-        const foreground = parse(process)?.foreground
-        const records = (parse(status)?.records ?? []).filter(
+        const processInfo = parse(processText)
+        const foreground = processInfo?.foreground
+        const records = (parse(statusText)?.records ?? []).filter(
           r =>
             (r.effective_app ?? r.app) === 'codex' &&
             Object.hasOwn(PRIORITY, r.state) &&
-            (!r.owner || (r.owner.pid === foreground?.pid && r.owner.name === foreground?.name)),
+            (!r.owner || isForeground(r.owner, foreground)),
         )
-        const terminalTitle = parse(title)
+        const terminalTitle = parse(titleText)
         const titleIsCurrent =
-          !terminalTitle?.owner ||
-          (terminalTitle.owner.pid === foreground?.pid &&
-            terminalTitle.owner.name === foreground?.name)
+          !terminalTitle?.owner || isForeground(terminalTitle.owner, foreground)
         const text = typeof terminalTitle?.title === 'string' ? terminalTitle.title : ''
         this.titles.set(`${session}/${block.block_id}`, titleSignature(text))
         return {
           block: block.block_id,
           foreground,
           records,
-          processKnown: parse(process) !== undefined,
+          processKnown: processInfo !== undefined,
           needsInput: titleIsCurrent && ACTION_REQUIRED.test(text),
         }
       }),
     )
 
     // Claude's function hooks own the label while Claude shares this tab.
-    if (
-      reports.some(r => !r.processKnown || ['claude', 'claude-code'].includes(r.foreground?.name))
-    )
-      return
+    if (reports.some(r => !r.processKnown || isClaude(r.foreground))) return
 
     const candidates = reports.filter(r => r.records.length > 0)
     if (candidates.length === 0) {
@@ -208,14 +214,8 @@ export class CodexTabs {
           this.run(['block', 'call', '-s', own.session, '-b', b.block_id, 'process']),
         ),
       )
-      if (
-        processes.some(
-          p =>
-            parse(p) === undefined ||
-            ['claude', 'claude-code'].includes(parse(p)?.foreground?.name),
-        )
-      )
-        continue
+      const infos = processes.map(parse)
+      if (infos.some(info => info === undefined || isClaude(info.foreground))) continue
       if (blocks.length > 0)
         await paintTab(this.run, {
           session: own.session,

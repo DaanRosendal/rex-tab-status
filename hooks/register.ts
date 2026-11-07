@@ -6,6 +6,7 @@ import { IdleDelay } from '../codex/hooks/idle.mjs'
 let status: Status = 'idle'
 let isMainTurnRunning = false
 const runningAgentTurns = new Set<string>()
+const REX_TIMEOUT_MS = 3000
 const pendingAsks = new Set<string>()
 let painting: Promise<void> = Promise.resolve()
 let idle: IdleDelay | undefined
@@ -27,7 +28,7 @@ function shown(): Status {
 
 async function rex($: EngineInterface, args: string[]): Promise<string | undefined> {
   try {
-    const ran = await $.process.run(['rex', ...args], { timeoutMs: 3000 })
+    const ran = await $.process.run(['rex', ...args], { timeoutMs: REX_TIMEOUT_MS })
     return ran.exitCode === 0 ? ran.stdout : undefined
   } catch {
     return undefined
