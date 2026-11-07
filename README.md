@@ -20,7 +20,7 @@ It does nothing outside Rex or when `rex` is not on the `PATH`.
 
 ### Claude Code
 
-Needs a Claude Code version with function hooks. Tested on 2.1.310.
+Needs a Claude Code version with function hooks. Tested on 2.1.319.
 
 At the prompt of a terminal session:
 
