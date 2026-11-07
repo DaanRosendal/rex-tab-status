@@ -1,13 +1,22 @@
 {
   "name": "rex-tab-status",
+  "description": "Prefix the Rex tab label with an emoji for the coding agent's state",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DaanRosendal/rex-tab-status.git"
+  },
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=22.18.0"
   },
   "scripts": {
-    "test:codex": "node --test tests/codex.test.mjs",
-    "test:themes": "node --test tests/themes.test.mjs",
-    "test:integration": "node --test tests/rex-integration.test.mjs"
+    "test": "node --test tests/codex.test.mjs tests/themes.test.mjs tests/watcher.test.mjs",
+    "test:plugin": "claude plugin test .",
+    "test:integration": "node --test tests/rex-integration.test.mjs",
+    "validate": "claude plugin validate .",
+    "format": "npx --yes prettier@3 --write .",
+    "format:check": "npx --yes prettier@3 --check ."
   }
 }

@@ -80,10 +80,10 @@ A tab name that starts with one of these icons and a space, such as `[ok] notes`
 ## Develop
 
 ```bash
-claude plugin validate .
-claude plugin test .
-node --test tests/codex.test.mjs tests/themes.test.mjs tests/watcher.test.mjs
-node --test tests/rex-integration.test.mjs
+npm test
+npm run test:plugin
+npm run test:integration
+npm run validate
 ```
 
 The integration test creates and removes its own Rex server and terminals.
