@@ -47,11 +47,11 @@ codex plugin add rex-tab-status@rex-tab-status
 
 Start a new Codex session and review the plugin's hook in `/hooks`. The hook starts one background watcher per Rex server. It follows Rex's terminal events (Codex's status reports, titles, and processes). It does not connect to a model or read conversation transcripts.
 
-The watcher keeps running after the Codex session ends, until Rex exits. To stop it, run `pkill -f 'codex.mjs watch'`. It restores the tab labels on the way out.
+The watcher keeps running after the Codex session ends, until Rex exits. To stop it, run `pkill -f 'watcher.mjs watch'`. It restores the tab labels on the way out.
 
 Codex can leave its native status at working while an async question waits. The watcher also recognizes Codex's `Action Required` title marker so those questions show ❓ until answered.
 
-Both hosts use the same repository and plugin name. Claude loads `hooks/hooks.json` and its function hooks. Codex's marketplace installs only `codex/`, keeping Git metadata and tests out of the bundle it fingerprints at startup. Its manifest selects `hooks/codex.json` and its background command hook. Both adapters use `codex/hooks/rex.ts` to update labels.
+Both hosts use the same repository and plugin name. Claude loads `hooks/hooks.json` and its function hooks. Codex's marketplace installs only `codex/`, keeping Git metadata and tests out of the bundle it fingerprints at startup. Its manifest selects `hooks/codex.json` and its background command hook. Both adapters use `codex/hooks/paint.ts` to update labels.
 
 ## Themes
 

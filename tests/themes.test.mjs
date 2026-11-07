@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { CodexTabs } from '../codex/hooks/codex.mjs'
-import { paintTab, resolveTheme, THEMES } from '../codex/hooks/rex.ts'
+import { CodexTabs } from '../codex/hooks/tabs.mjs'
+import { paintTab } from '../codex/hooks/paint.ts'
+import { resolveTheme, THEMES } from '../codex/hooks/themes.ts'
 
 const SESSION = 'session:s1'
 const BLOCK = 'block:b1'

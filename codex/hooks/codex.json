@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/hooks/codex.mjs\" start",
+            "command": "node \"${PLUGIN_ROOT}/hooks/watcher.mjs\" start",
             "timeout": 5,
             "async": true
           }

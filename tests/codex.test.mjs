@@ -3,7 +3,8 @@ import { mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { claimLock, CodexTabs } from '../codex/hooks/codex.mjs'
+import { claimLock } from '../codex/hooks/lock.mjs'
+import { CodexTabs } from '../codex/hooks/tabs.mjs'
 import { IDLE_DELAY_MS } from '../codex/hooks/idle.mjs'
 
 const SESSION = 'session:s1'
@@ -353,7 +354,7 @@ test('each host selects its own hook format under the same plugin identity', asy
   assert.deepEqual(claudeHooks.modules, ['./register.ts'])
   assert.equal(codexHooks.modules, undefined)
   assert.equal(codexHooks.hooks.SessionStart[0].hooks[0].type, 'command')
-  assert.match(codexHooks.hooks.SessionStart[0].hooks[0].command, /codex\.mjs/)
+  assert.match(codexHooks.hooks.SessionStart[0].hooks[0].command, /watcher\.mjs/)
   assert.equal(codexHooks.hooks.SessionStart[0].hooks[0].async, true)
 })
 

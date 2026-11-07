@@ -1,4 +1,6 @@
-export type Status = 'ready' | 'idle' | 'working' | 'blocked' | 'done' | 'error'
+import { ICON_PREFIX, THEMES, type Icons, type Status } from './themes.ts'
+
+export type { Status }
 export type RunRex = (args: string[]) => Promise<string | undefined>
 export type RexWindow = {
   window_id: string
@@ -6,31 +8,7 @@ export type RexWindow = {
   layers?: { blocks?: { block_id: string; creator_name?: string }[] }[]
 }
 
-export type Icons = Record<Status, string>
-
-// Never remove an icon from a preset: tabs already showing it could no longer be cleaned.
-export const THEMES = {
-  default: { ready: '', idle: '💤', working: '⏳', blocked: '❓', done: '✅', error: '❌' },
-  ascii: { ready: '', idle: '[zz]', working: '[..]', blocked: '[?]', done: '[ok]', error: '[x]' },
-  minimal: { ready: '', idle: '○', working: '◐', blocked: '◆', done: '✓', error: '✗' },
-  circles: { ready: '', idle: '⚪', working: '🟡', blocked: '🔴', done: '🟢', error: '⛔' },
-} as const satisfies Record<string, Icons>
-
-export type ThemeName = keyof typeof THEMES
-
-export function resolveTheme(name: string | undefined): Icons {
-  const key = (name ?? '').trim().toLowerCase()
-  return Object.hasOwn(THEMES, key) ? THEMES[key as ThemeName] : THEMES.default
-}
-
-const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-const PREFIX = new RegExp(
-  `^(${[...new Set(Object.values(THEMES).flatMap(icons => Object.values(icons)))]
-    .filter(Boolean)
-    .sort((a, b) => b.length - a.length)
-    .map(escapeRegExp)
-    .join('|')}) `,
-)
+const MAX_NAME_LENGTH = 60
 const REX_DEFAULT_LABEL = /^Window [0-9a-f]+$/
 
 export function parse(text: string | undefined): any {
@@ -54,7 +32,7 @@ export function blocksOf(win: RexWindow) {
 
 function clean(text: unknown): string {
   return String(text ?? '')
-    .slice(0, 60)
+    .slice(0, MAX_NAME_LENGTH)
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
     .trim()
 }
@@ -79,7 +57,7 @@ export async function paintTab(
   const win = windows.find(w => blocksOf(w).some(b => b.block_id === block))
   if (!win) return { ownName }
 
-  const bare = win.label.replace(PREFIX, '')
+  const bare = win.label.replace(ICON_PREFIX, '')
   const isAutoNamed = bare === '' || REX_DEFAULT_LABEL.test(bare) || bare === ownName
 
   if (isEnding) {
