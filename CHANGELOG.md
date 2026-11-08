@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0] - 2026-11-08
+
+### Changed
+
+- Share one status core between the Claude Code and Codex plugins, so both follow the same rules for working, blocked, done and the idle wait ([`67c4d77`](https://github.com/DaanRosendal/rex-tab-status/commit/67c4d77))
+- Restart the idle wait on `/clear` and on every new session start ([`67c4d77`](https://github.com/DaanRosendal/rex-tab-status/commit/67c4d77))
+
+### Added
+
+- Add `harnesses.json`, so supporting another agent takes one entry and a thin adapter ([`67c4d77`](https://github.com/DaanRosendal/rex-tab-status/commit/67c4d77))
+- Add `AGENTS.md` and a tag-triggered release workflow ([`6dabc8c`](https://github.com/DaanRosendal/rex-tab-status/commit/6dabc8c))
+
 ## [0.4.1] - 2026-11-08
 
 ### Fixed
@@ -51,6 +63,7 @@
 - Show Claude Code's state on the Rex tab label as an emoji: idle, working, needs you, done or error ([`2653a95`](https://github.com/DaanRosendal/rex-tab-status/commit/2653a95))
 - Leave the tab alone in non-interactive sessions, and show refusals as errors ([`c4eee98`](https://github.com/DaanRosendal/rex-tab-status/commit/c4eee98))
 
+[0.5.0]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v0.5.0
 [0.4.1]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v0.4.1
 [0.4.0]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v0.4.0
 [0.3.3]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v0.3.3
