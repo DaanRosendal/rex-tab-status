@@ -51,7 +51,7 @@ The watcher keeps running after the Codex session ends, until Rex exits. To stop
 
 Codex can leave its native status at working while an async question waits. The watcher also recognizes Codex's `Action Required` title marker so those questions show ❓ until answered.
 
-Both hosts use the same repository and plugin name. Claude loads `hooks/hooks.json` and its function hooks. Codex's marketplace installs only `codex/`, keeping Git metadata and tests out of the bundle it fingerprints at startup. Its manifest selects `hooks/codex.json` and its background command hook. Both adapters use `codex/hooks/paint.ts` to update labels.
+Both hosts use the same repository and plugin name. Each host installs only its own folder: `claude/` for Claude, `codex/` for Codex. Claude loads `claude/hooks/hooks.json` and its function hooks. Codex's manifest selects `hooks/codex.json` and its background command hook, and Codex fingerprints its bundle at startup. The code both share lives in `shared/` and is copied into each folder's `hooks/vendor/` by `npm run sync`.
 
 ## Themes
 
@@ -84,7 +84,10 @@ npm test
 npm run test:plugin
 npm run test:integration
 npm run validate
+npm run sync
 ```
+
+Edit shared code in `shared/`, then run `npm run sync`. CI fails when a vendored copy differs from `shared/`. `npm run bump -- X.Y.Z` sets the version in `package.json` and every plugin manifest.
 
 The integration test creates and removes its own Rex server and terminals.
 
@@ -97,6 +100,6 @@ codex plugin add rex-tab-status@rex-tab-status
 
 ## Limits
 
-Two Claude sessions in split panes of one Rex tab overwrite each other's emoji. In auto mode a tool call the classifier decides on can show ❓ for a moment.
+Two Claude sessions in split panes of one Rex tab overwrite each other's emoji. In auto mode, a tool call the classifier takes longer than two seconds to decide can show ❓ for a moment.
 
 Multiple Codex panes in one tab share an emoji. Waiting for you takes priority over working, then error, done, and idle. The title follows the first Codex pane. In a tab shared by Claude and Codex, Claude owns the label and the Codex watcher leaves it alone.

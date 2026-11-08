@@ -1,11 +1,17 @@
-import { IdleDelay } from './idle.mjs'
-import { blocksOf, paintTab, parse, parseWindows } from './paint.ts'
-import { resolveTheme } from './themes.ts'
+import { initialState, step, Timers } from './vendor/core.ts'
+import { blocksOf, paintTab, parse, parseWindows } from './vendor/paint.ts'
+import { resolveTheme } from './vendor/themes.ts'
 
 const PRIORITY = { idle: 0, done: 1, error: 2, working: 3, blocked: 4 }
 const TERMINAL = 'com.superlogical.terminal'
 // Codex marks an async question in the terminal title while its status report can stay at working.
 const ACTION_REQUIRED = /^\[ [!.] \] Action Required(?: \| |$)/
+
+function startTimer(callback, ms) {
+  const timer = setTimeout(callback, ms)
+  timer.unref?.()
+  return { cancel: () => clearTimeout(timer) }
+}
 
 const CLAUDE_NAMES = ['claude', 'claude-code']
 
@@ -54,7 +60,7 @@ export class CodexTabs {
     }
     for (const [key, own] of this.owned) {
       if (own.session === session && !windows.some(w => w.window_id === own.window)) {
-        own.idle.cancel()
+        own.timers.cancelAll()
         this.owned.delete(key)
       }
     }
@@ -99,7 +105,7 @@ export class CodexTabs {
 
     const candidates = reports.filter(r => r.records.length > 0)
     if (candidates.length === 0) {
-      own?.idle.cancel()
+      own?.timers.cancelAll()
       if (own && win.label === own.label && blocks.length > 0) {
         await paintTab(this.run, {
           session,
@@ -124,28 +130,32 @@ export class CodexTabs {
     const owners = candidates
       .map(c => `${c.block}/${c.foreground?.pid}/${c.foreground?.name}`)
       .join(',')
-    if (own && own.owners !== owners) own.idle.cancel()
-    const idle =
+    if (own && own.owners !== owners) own.timers.cancelAll()
+    const current =
       own?.owners === owners
-        ? own.idle
-        : new IdleDelay(() => this.refresh(session, undefined, win.window_id))
+        ? own
+        : { session, window: win.window_id, owners, core: initialState, timers: new Timers() }
+    const observed = step(current.core, { type: 'observed', status })
+    current.core = observed.state
+    current.timers.sync(observed.timers, (key, ms) =>
+      startTimer(() => {
+        current.timers.fired(key)
+        current.core = step(current.core, { type: 'timer', key }).state
+        return this.refresh(session, undefined, win.window_id)
+      }, ms),
+    )
     const result = await paintTab(this.run, {
       session,
       block,
-      status: idle.update(status),
+      status: observed.shown,
       ownName: own?.name,
       windows: [win],
       formatTitle: cleanTitle,
       icons: this.icons,
     })
-    this.owned.set(key, {
-      session,
-      window: win.window_id,
-      name: result.ownName,
-      label: result.label,
-      idle,
-      owners,
-    })
+    current.name = result.ownName
+    current.label = result.label
+    this.owned.set(key, current)
   }
 
   async handle(event) {
@@ -154,7 +164,7 @@ export class CodexTabs {
       if (typeof session !== 'string') return
       for (const [key, own] of this.owned)
         if (own.session === session) {
-          own.idle.cancel()
+          own.timers.cancelAll()
           this.owned.delete(key)
         }
       for (const key of this.titles.keys())
@@ -203,7 +213,7 @@ export class CodexTabs {
     this.stopping = true
     await this.painting
     for (const own of [...this.owned.values()]) {
-      own.idle.cancel()
+      own.timers.cancelAll()
       const windows =
         parseWindows(await this.run(['window', 'ls', '-s', own.session, '--json'])) ?? []
       const win = windows.find(w => w.window_id === own.window)

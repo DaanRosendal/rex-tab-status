@@ -1,8 +1,6 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
-import { IDLE_DELAY_MS } from '../codex/hooks/idle.mjs'
-
-const ASK_GRACE_MS = 2000
+import { ASK_GRACE_MS, IDLE_DELAY_MS } from '../hooks/vendor/core.ts'
 
 const SESSION = 'session:s1'
 const BLOCK = 'block:b1'
@@ -96,6 +94,19 @@ test('starting work cancels the idle timer and an interruption starts a fresh on
   await clock.advance(IDLE_DELAY_MS)
   expect(rex.label).toBe('⏳ Fix login redirect')
   await $.turn.complete({ ...done('t1'), isAborted: true, reason: 'aborted' })
+  await clock.advance(IDLE_DELAY_MS - 1)
+  expect(rex.label).toBe('Fix login redirect')
+  await clock.advance(1)
+  await clock.settle()
+  expect(rex.label).toBe('💤 Fix login redirect')
+})
+
+test('a second session start while idle begins a fresh five-minute wait', async ($, on) => {
+  const clock = mock.clock(on)
+  const rex = fakeRex(on)
+  await $.session.start(START)
+  await clock.advance(ASK_GRACE_MS - 1)
+  await $.session.start(START)
   await clock.advance(IDLE_DELAY_MS - 1)
   expect(rex.label).toBe('Fix login redirect')
   await clock.advance(1)

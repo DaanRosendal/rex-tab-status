@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "rex-tab-status",
-      "source": "./"
+      "source": "./claude"
     }
   ]
 }
