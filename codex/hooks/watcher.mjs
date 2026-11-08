@@ -6,10 +6,10 @@ import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 import { claimLock } from './lock.mjs'
-import { parse } from './paint.ts'
+import { parse } from './vendor/paint.ts'
 import { rexArgs, runner } from './rex-cli.mjs'
 import { CodexTabs } from './tabs.mjs'
-import { resolveTheme } from './themes.ts'
+import { resolveTheme } from './vendor/themes.ts'
 
 const filename = fileURLToPath(import.meta.url)
 

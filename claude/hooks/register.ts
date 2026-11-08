@@ -1,33 +1,34 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { paintTab } from '../codex/hooks/paint.ts'
-import { resolveTheme, type Status } from '../codex/hooks/themes.ts'
-import { IdleDelay } from '../codex/hooks/idle.mjs'
+import { paintTab } from './vendor/paint.ts'
+import { resolveTheme, type Status } from './vendor/themes.ts'
+import { initialState, step, Timers, type CoreEvent, type CoreState } from './vendor/core.ts'
 
-let status: Status = 'idle'
-let isMainTurnRunning = false
-const runningAgentTurns = new Set<string>()
 const REX_TIMEOUT_MS = 3000
-// Auto mode's classifier also answers an `ask`, and does so within a second or two. Only an ask
-// still open after this wait is a dialog worth showing.
-const ASK_GRACE_MS = 2000
-// Maps each open ask to whether it has earned the question mark.
-const pendingAsks = new Map<string, boolean>()
+let state: CoreState = initialState
+let shown: Status = 'ready'
+const timers = new Timers()
 let painting: Promise<void> = Promise.resolve()
-let idle: IdleDelay | undefined
 // A `claude -p` run inside a Rex pane inherits its variables and must leave that tab alone.
 let isInteractive = false
 
-function reset() {
-  idle?.cancel()
-  idle = undefined
-  status = 'idle'
-  isMainTurnRunning = false
-  runningAgentTurns.clear()
-  pendingAsks.clear()
-}
-
-function shown(): Status {
-  return [...pendingAsks.values()].some(Boolean) ? 'blocked' : status
+// Each timer's callback keeps the `$` of the hook that started it, which must stay live.
+function dispatch($: EngineInterface, event: CoreEvent) {
+  // A reset starts a fresh idle wait, so a timer already running must not carry over.
+  if (event.type === 'reset') timers.cancelAll()
+  const result = step(state, event)
+  state = result.state
+  shown = result.shown
+  if (!isInteractive) {
+    timers.cancelAll()
+    return
+  }
+  timers.sync(result.timers, (key, ms) =>
+    $.clock.after(ms, async () => {
+      timers.fired(key)
+      dispatch($, { type: 'timer', key })
+      await paint($)
+    }),
+  )
 }
 
 async function rex($: EngineInterface, args: string[]): Promise<string | undefined> {
@@ -61,17 +62,8 @@ async function repaint($: EngineInterface, isEnding: boolean, displayed: Status)
 // Each hook awaits its own repaint so the `$` it hands over is still live.
 function paint($: EngineInterface, isEnding = false): Promise<void> {
   if (!isInteractive) return painting
-  const current = shown()
-  if (isEnding || current !== 'idle') {
-    idle?.cancel()
-    idle = undefined
-  } else {
-    idle ??= new IdleDelay(
-      () => paint($),
-      (ms, callback) => $.clock.after(ms, callback),
-    )
-  }
-  const displayed = idle ? idle.update(current) : current
+  if (isEnding) timers.cancelAll()
+  const displayed = shown
   painting = painting.then(() => repaint($, isEnding, displayed)).catch(() => {})
   return painting
 }
@@ -82,7 +74,10 @@ async function settleAsks($: EngineInterface, rows: readonly CallRow[]) {
   let isSettled = false
   for (const row of rows) {
     const isPastDialog = row.isRunning || row.output !== undefined
-    if (isPastDialog && row.tool_use_id && pendingAsks.delete(row.tool_use_id)) isSettled = true
+    if (isPastDialog && row.tool_use_id && Object.hasOwn(state.asks, row.tool_use_id)) {
+      dispatch($, { type: 'askClosed', id: row.tool_use_id })
+      isSettled = true
+    }
   }
   if (isSettled) await paint($)
 }
@@ -90,57 +85,49 @@ async function settleAsks($: EngineInterface, rows: readonly CallRow[]) {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     isInteractive = e.isInteractive
-    reset()
+    dispatch($, { type: 'reset' })
     await paint($)
     return next(e)
   })
 
   on('turn.start', async ($, e, next) => {
-    if (e.agentId === undefined) isMainTurnRunning = true
-    else runningAgentTurns.add(e.turnId)
-    status = 'working'
+    dispatch($, { type: 'turnStarted', turnId: e.turnId, isSubagent: e.agentId !== undefined })
     await paint($)
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
-    if (e.agentId === undefined) {
-      isMainTurnRunning = false
-      pendingAsks.clear()
-      status =
-        e.reason === 'error' || e.reason === 'refusal' ? 'error' : e.isAborted ? 'idle' : 'done'
-    } else {
-      runningAgentTurns.delete(e.turnId)
-      if (!isMainTurnRunning && status === 'working') status = 'done'
-    }
-    if (isMainTurnRunning || runningAgentTurns.size > 0) status = 'working'
+    const outcome =
+      e.reason === 'error' || e.reason === 'refusal' ? 'error' : e.isAborted ? 'aborted' : 'done'
+    dispatch($, {
+      type: 'turnEnded',
+      turnId: e.turnId,
+      isSubagent: e.agentId !== undefined,
+      outcome,
+    })
     await paint($)
     return next(e)
   })
 
   // An ask goes to the mode's decider, which may be a dialog or the auto-mode classifier. Only an ask
-  // that stays open past the grace wait is shown.
+  // that stays open past the grace wait is shown, so the grace timer does the painting.
   on('tool.check', async ($, e, next) => {
     const verdict = await next(e)
-    const id = e.tool_use_id
-    if (verdict.decision === 'ask' && e.approver === 'person' && id && !pendingAsks.has(id)) {
-      pendingAsks.set(id, false)
-      $.clock.after(ASK_GRACE_MS, async () => {
-        if (!pendingAsks.has(id)) return
-        pendingAsks.set(id, true)
-        await paint($)
-      })
-    }
+    if (verdict.decision === 'ask' && e.approver === 'person' && e.tool_use_id)
+      dispatch($, { type: 'askOpened', id: e.tool_use_id, isImmediate: false })
     return verdict
   })
 
   on('tool.call', async ($, e, next) => {
     if (e.tool === 'AskUserQuestion' || e.tool === 'ExitPlanMode') {
-      pendingAsks.set(e.tool_use_id, true)
+      dispatch($, { type: 'askOpened', id: e.tool_use_id, isImmediate: true })
       await paint($)
     }
     const ran = await next(e)
-    if (pendingAsks.delete(e.tool_use_id)) await paint($)
+    if (Object.hasOwn(state.asks, e.tool_use_id)) {
+      dispatch($, { type: 'askClosed', id: e.tool_use_id })
+      await paint($)
+    }
     return ran
   })
 
@@ -158,7 +145,7 @@ export const register: Register = on => {
   // A /clear ends the conversation but keeps the tab, so it resets instead of restoring the name.
   on('session.end', async ($, e, next) => {
     if (e.reason === 'clear') {
-      reset()
+      dispatch($, { type: 'reset' })
       await paint($)
     } else {
       await paint($, true)

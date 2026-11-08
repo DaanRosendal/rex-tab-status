@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { CodexTabs } from '../codex/hooks/tabs.mjs'
-import { paintTab } from '../codex/hooks/paint.ts'
-import { resolveTheme, THEMES } from '../codex/hooks/themes.ts'
+import { paintTab } from '../shared/paint.ts'
+import { resolveTheme, THEMES } from '../shared/themes.ts'
 import { BLOCK, createFakeRex, SESSION } from './helpers/fake-rex.mjs'
 
 const STATES = ['idle', 'working', 'blocked', 'done', 'error']
