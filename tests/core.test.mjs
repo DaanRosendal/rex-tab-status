@@ -93,6 +93,7 @@ test('a repeated check keeps the first ask and its timer', () => {
   const first = run(start(main()), ask('u1'))
   const again = step(first.state, ask('u1'))
   assert.deepEqual(again.state, first.state)
+  assert.deepEqual(again.timers, first.timers)
 })
 
 test('the end of a turn drops every open ask', () => {

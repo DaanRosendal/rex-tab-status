@@ -101,6 +101,19 @@ test('starting work cancels the idle timer and an interruption starts a fresh on
   expect(rex.label).toBe('💤 Fix login redirect')
 })
 
+test('a second session start while idle begins a fresh five-minute wait', async ($, on) => {
+  const clock = mock.clock(on)
+  const rex = fakeRex(on)
+  await $.session.start(START)
+  await clock.advance(ASK_GRACE_MS - 1)
+  await $.session.start(START)
+  await clock.advance(IDLE_DELAY_MS - 1)
+  expect(rex.label).toBe('Fix login redirect')
+  await clock.advance(1)
+  await clock.settle()
+  expect(rex.label).toBe('💤 Fix login redirect')
+})
+
 test('session exit cancels the idle timer', async ($, on) => {
   const clock = mock.clock(on)
   const rex = fakeRex(on)

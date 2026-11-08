@@ -13,6 +13,8 @@ let isInteractive = false
 
 // Each timer's callback keeps the `$` of the hook that started it, which must stay live.
 function dispatch($: EngineInterface, event: CoreEvent) {
+  // A reset starts a fresh idle wait, so a timer already running must not carry over.
+  if (event.type === 'reset') timers.cancelAll()
   const result = step(state, event)
   state = result.state
   shown = result.shown

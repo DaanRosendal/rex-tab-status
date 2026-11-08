@@ -12,7 +12,7 @@ A Claude Code mod (`claude/hooks/register.ts`) and a Codex background watcher (`
 
 ## Commands
 
-- `npm test`: unit tests for the watcher, lock, tabs, themes, manifests and vendored copies. Needs Node 22.18 or newer.
+- `npm test`: unit tests for the core, watcher, lock, tabs, themes, manifests and vendored copies. Needs Node 22.18 or newer.
 - `npm run test:plugin`: tests for the Claude mod in `claude/tests/`. Needs the `claude` CLI.
 - `npm run validate`: `claude plugin validate claude`. Run it after touching `claude/hooks/`.
 - `npm run sync`: copy `shared/` into every harness. `npm run sync:check` fails on drift.
@@ -25,7 +25,7 @@ A Claude Code mod (`claude/hooks/register.ts`) and a Codex background watcher (`
 - A hooks module may import only relative files and `claude-code`. Anything else, such as `node:fs`, stops the whole hook from loading and the tab never changes. `npm run validate` catches it. Keep `shared/` free of `node:*` imports for the same reason.
 - An installed plugin contains only its own root, so a harness can never import from outside it. That is why `shared/` is copied in.
 - A plugin installed from a local directory marketplace loads its hooks from the repo, not from `~/.claude/plugins/cache`. Reload with `/reload-plugins`. A session that started earlier keeps running the old code.
-- `tool.check` returns `ask` with `approver: 'person'` even when auto mode's classifier approves the call within a second or two. `ASK_GRACE_MS` in `register.ts` keeps those from flashing ❓.
+- `tool.check` returns `ask` with `approver: 'person'` even when auto mode's classifier approves the call within a second or two. `ASK_GRACE_MS` in `shared/core.ts` keeps those from flashing ❓.
 - Never remove an icon from a theme in `themes.ts`. Tabs already showing it could no longer be cleaned.
 - `lock.mjs` and `rex-cli.mjs` are identical in rex-session-names. Keep both copies in sync.
 
