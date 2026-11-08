@@ -7,7 +7,11 @@ let status: Status = 'idle'
 let isMainTurnRunning = false
 const runningAgentTurns = new Set<string>()
 const REX_TIMEOUT_MS = 3000
-const pendingAsks = new Set<string>()
+// Auto mode's classifier also answers an `ask`, and does so within a second or two. Only an ask
+// still open after this wait is a dialog worth showing.
+const ASK_GRACE_MS = 2000
+// Maps each open ask to whether it has earned the question mark.
+const pendingAsks = new Map<string, boolean>()
 let painting: Promise<void> = Promise.resolve()
 let idle: IdleDelay | undefined
 // A `claude -p` run inside a Rex pane inherits its variables and must leave that tab alone.
@@ -23,7 +27,7 @@ function reset() {
 }
 
 function shown(): Status {
-  return pendingAsks.size > 0 ? 'blocked' : status
+  return [...pendingAsks.values()].some(Boolean) ? 'blocked' : status
 }
 
 async function rex($: EngineInterface, args: string[]): Promise<string | undefined> {
@@ -114,19 +118,25 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // An ask reaches a person only when the mode's decider puts up a dialog.
+  // An ask goes to the mode's decider, which may be a dialog or the auto-mode classifier. Only an ask
+  // that stays open past the grace wait is shown.
   on('tool.check', async ($, e, next) => {
     const verdict = await next(e)
-    if (verdict.decision === 'ask' && e.approver === 'person' && e.tool_use_id) {
-      pendingAsks.add(e.tool_use_id)
-      await paint($)
+    const id = e.tool_use_id
+    if (verdict.decision === 'ask' && e.approver === 'person' && id && !pendingAsks.has(id)) {
+      pendingAsks.set(id, false)
+      $.clock.after(ASK_GRACE_MS, async () => {
+        if (!pendingAsks.has(id)) return
+        pendingAsks.set(id, true)
+        await paint($)
+      })
     }
     return verdict
   })
 
   on('tool.call', async ($, e, next) => {
     if (e.tool === 'AskUserQuestion' || e.tool === 'ExitPlanMode') {
-      pendingAsks.add(e.tool_use_id)
+      pendingAsks.set(e.tool_use_id, true)
       await paint($)
     }
     const ran = await next(e)

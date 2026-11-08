@@ -2,6 +2,8 @@ import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import { IDLE_DELAY_MS } from '../codex/hooks/idle.mjs'
 
+const ASK_GRACE_MS = 2000
+
 const SESSION = 'session:s1'
 const BLOCK = 'block:b1'
 const WINDOW = 'window:w1'
@@ -201,6 +203,61 @@ test('an answered question goes back to working before its call returns', async 
   await $.tool.call({ tool: 'AskUserQuestion', questions: [] } as never)
 
   expect(labelAfterAnswer).toBe('⏳ Fix login redirect')
+})
+
+async function startPermissionAsk($: any, on: On, rex: FakeRex, toolUseId: string) {
+  const clock = mock.clock(on)
+  on('tool.check', () => ({ decision: 'ask' }))
+  on('ui.render', ($, e) => h($.ui.resolve(e).Text, {}, 'row'))
+  await $.session.start(START)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await $.tool.check({ tool: 'Bash', tool_use_id: toolUseId, approver: 'person' } as never)
+  return {
+    clock,
+    answer: () =>
+      $.ui.render({
+        surface: 'terminal',
+        component: 'ToolGroup',
+        requestId: 'g1',
+        props: {
+          calls: [
+            {
+              tool_use_id: toolUseId,
+              tool: 'Bash',
+              input: {},
+              isErrored: false,
+              isInterrupted: false,
+              isRunning: true,
+            },
+          ],
+          isActive: true,
+          isExpanded: false,
+        },
+      }),
+  }
+}
+
+test('a permission ask answered within the grace wait never shows the question mark', async ($, on) => {
+  const rex = fakeRex(on)
+  const { clock, answer } = await startPermissionAsk($, on, rex, 'u1')
+  await clock.advance(ASK_GRACE_MS - 1)
+  expect(rex.label).toBe('⏳ Fix login redirect')
+
+  await answer()
+  await clock.advance(ASK_GRACE_MS)
+  await clock.settle()
+  expect(rex.label).toBe('⏳ Fix login redirect')
+})
+
+test('a permission ask still open after the grace wait shows the question mark until answered', async ($, on) => {
+  const rex = fakeRex(on)
+  const { clock, answer } = await startPermissionAsk($, on, rex, 'u1')
+  await clock.advance(ASK_GRACE_MS)
+  await clock.settle()
+  expect(rex.label).toBe('❓ Fix login redirect')
+
+  await answer()
+  expect(rex.label).toBe('⏳ Fix login redirect')
 })
 
 test('a name the person gave the tab is kept, and the end hands it back', async ($, on) => {
