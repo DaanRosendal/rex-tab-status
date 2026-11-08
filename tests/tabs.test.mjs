@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { CodexTabs } from '../codex/hooks/tabs.mjs'
-import { IDLE_DELAY_MS } from '../shared/idle.mjs'
+import { IDLE_DELAY_MS } from '../shared/core.ts'
 import { BLOCK, createFakeRex, SESSION, TERMINAL, WINDOW } from './helpers/fake-rex.mjs'
 
 function setup(label) {

@@ -1,8 +1,6 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
-import { IDLE_DELAY_MS } from '../hooks/vendor/idle.mjs'
-
-const ASK_GRACE_MS = 2000
+import { ASK_GRACE_MS, IDLE_DELAY_MS } from '../hooks/vendor/core.ts'
 
 const SESSION = 'session:s1'
 const BLOCK = 'block:b1'

@@ -4,7 +4,8 @@ A Claude Code mod (`claude/hooks/register.ts`) and a Codex background watcher (`
 
 ## Layout
 
-- `shared/` is the source of truth for code every harness uses (`paint.ts`, `themes.ts`, `idle.mjs`).
+- `shared/` is the source of truth for code every harness uses: `core.ts` (the pure status logic), `paint.ts` and `themes.ts`.
+- `shared/core.ts` turns normalized events into the status to show: working, blocked, done, the idle wait and the ask grace. It reads no clock. `step` returns the timers it wants running, and each adapter starts them with its own clock through `Timers`.
 - `claude/` and `codex/` are complete plugin roots. Each holds its manifest, hook config, adapter and a generated copy of `shared/` in `hooks/vendor/`.
 - `harnesses.json` lists every harness: root, manifest, marketplace and vendor directory. Scripts and tests read it, so a new harness is one entry.
 - Never edit `hooks/vendor/`. Edit `shared/`, then run `npm run sync`.
@@ -38,7 +39,7 @@ A Claude Code mod (`claude/hooks/register.ts`) and a Codex background watcher (`
 
 1. Create `<name>/` as the plugin root with its manifest and hook config.
 2. Add an entry to `harnesses.json`.
-3. Write a thin adapter that imports only from its own `hooks/vendor/`.
+3. Write a thin adapter that maps the host's events to `core.ts` events, starts the timers `step` asks for, and paints `shown` with `paint.ts`. It imports only from its own `hooks/vendor/`.
 4. Run `npm run sync`.
 5. Add the marketplace file, and tests for the adapter.
 
