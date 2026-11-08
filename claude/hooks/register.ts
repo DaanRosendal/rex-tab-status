@@ -110,10 +110,11 @@ export const register: Register = on => {
   })
 
   // An ask goes to the mode's decider, which may be a dialog or the auto-mode classifier. Only an ask
-  // that stays open past the grace wait is shown, so the grace timer does the painting.
+  // that stays open past the grace wait is shown, so the grace timer does the painting. A subagent's
+  // ask is never a dialog and its call is never redrawn here, so nothing would close it before the tool ends.
   on('tool.check', async ($, e, next) => {
     const verdict = await next(e)
-    if (verdict.decision === 'ask' && e.approver === 'person' && e.tool_use_id)
+    if (verdict.decision === 'ask' && e.approver === 'person' && e.tool_use_id && !e.agentId)
       dispatch($, { type: 'askOpened', id: e.tool_use_id, isImmediate: false })
     return verdict
   })

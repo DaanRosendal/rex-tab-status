@@ -248,6 +248,24 @@ async function startPermissionAsk($: any, on: On, rex: FakeRex, toolUseId: strin
   }
 }
 
+test('a subagent permission ask never shows the question mark', async ($, on) => {
+  const rex = fakeRex(on)
+  const clock = mock.clock(on)
+  on('tool.check', () => ({ decision: 'ask' }))
+  await $.session.start(START)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await $.turn.start({ text: 'sub', turnId: 'a1-t', agentId: 'a1' })
+  await $.tool.check({
+    tool: 'Bash',
+    tool_use_id: 'u1',
+    agentId: 'a1',
+    approver: 'person',
+  } as never)
+  await clock.advance(ASK_GRACE_MS * 2)
+  await clock.settle()
+  expect(rex.label).toBe('⏳ Fix login redirect')
+})
+
 test('a permission ask answered within the grace wait never shows the question mark', async ($, on) => {
   const rex = fakeRex(on)
   const { clock, answer } = await startPermissionAsk($, on, rex, 'u1')

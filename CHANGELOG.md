@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- Stop the ❓ from flickering while background subagents run. Their permission asks are never dialogs, so they no longer show ❓ until the tool finishes.
+
 ## 0.5.0
 
 - Split the repo into `claude/` and `codex/` plugin roots that share one status core in `shared/`. Both adapters now follow the same rules for working, blocked, done and the idle wait.
