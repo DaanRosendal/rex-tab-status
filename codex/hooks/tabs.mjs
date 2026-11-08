@@ -1,6 +1,6 @@
-import { IdleDelay } from './idle.mjs'
-import { blocksOf, paintTab, parse, parseWindows } from './paint.ts'
-import { resolveTheme } from './themes.ts'
+import { IdleDelay } from './vendor/idle.mjs'
+import { blocksOf, paintTab, parse, parseWindows } from './vendor/paint.ts'
+import { resolveTheme } from './vendor/themes.ts'
 
 const PRIORITY = { idle: 0, done: 1, error: 2, working: 3, blocked: 4 }
 const TERMINAL = 'com.superlogical.terminal'

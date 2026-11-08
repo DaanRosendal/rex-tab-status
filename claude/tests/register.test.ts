@@ -1,6 +1,6 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
-import { IDLE_DELAY_MS } from '../codex/hooks/idle.mjs'
+import { IDLE_DELAY_MS } from '../hooks/vendor/idle.mjs'
 
 const ASK_GRACE_MS = 2000
 

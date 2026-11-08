@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { paintTab } from '../codex/hooks/paint.ts'
-import { resolveTheme, type Status } from '../codex/hooks/themes.ts'
-import { IdleDelay } from '../codex/hooks/idle.mjs'
+import { paintTab } from './vendor/paint.ts'
+import { resolveTheme, type Status } from './vendor/themes.ts'
+import { IdleDelay } from './vendor/idle.mjs'
 
 let status: Status = 'idle'
 let isMainTurnRunning = false
