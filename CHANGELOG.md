@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.0] - 2026-11-16
+
+### Changed
+
+- **Breaking:** Rewrite around the status that Claude Code and Codex report to Rex. One background watcher mirrors it into the tab label, replacing the per-agent hooks and their timing logic ([`0af773f`](https://github.com/DaanRosendal/rex-tab-status/commit/0af773f)) ([#1](https://github.com/DaanRosendal/rex-tab-status/pull/1))
+- **Breaking:** Require Claude Code 2.1.325 or newer and Codex 0.169 or newer ([`0af773f`](https://github.com/DaanRosendal/rex-tab-status/commit/0af773f))
+- Install once for both agents from `plugin/`, and replace a running watcher when a newer plugin version starts ([`0af773f`](https://github.com/DaanRosendal/rex-tab-status/commit/0af773f))
+- Show a permission ask from a background subagent as ❓ at once, and rejected credentials as ❌ ([`0af773f`](https://github.com/DaanRosendal/rex-tab-status/commit/0af773f))
+
+### Added
+
+- Add `REX_TAB_STATUS_APPS` to choose which agents to follow, and `REX_TAB_STATUS=off` to disable the plugin ([`0af773f`](https://github.com/DaanRosendal/rex-tab-status/commit/0af773f))
+- Add `stop` and `doctor` commands to the watcher ([`0af773f`](https://github.com/DaanRosendal/rex-tab-status/commit/0af773f))
+
+### Removed
+
+- **Breaking:** Remove `harnesses.json`, the shared status core and the per-agent hooks ([`0af773f`](https://github.com/DaanRosendal/rex-tab-status/commit/0af773f))
+
 ## [0.5.1] - 2026-11-08
 
 ### Fixed
@@ -69,6 +87,7 @@
 - Show Claude Code's state on the Rex tab label as an emoji: idle, working, needs you, done or error ([`2653a95`](https://github.com/DaanRosendal/rex-tab-status/commit/2653a95))
 - Leave the tab alone in non-interactive sessions, and show refusals as errors ([`c4eee98`](https://github.com/DaanRosendal/rex-tab-status/commit/c4eee98))
 
+[1.0.0]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v1.0.0
 [0.5.1]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v0.5.1
 [0.5.0]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v0.5.0
 [0.4.1]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v0.4.1
