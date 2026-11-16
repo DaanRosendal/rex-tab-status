@@ -1,16 +1,22 @@
 import assert from 'node:assert/strict'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { test } from 'node:test'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
-const plugin = fileURLToPath(new URL('../codex/hooks/watcher.mjs', import.meta.url))
+const watcher = fileURLToPath(new URL('../plugin/src/watcher.mjs', import.meta.url))
+const manifest = fileURLToPath(new URL('../plugin/.claude-plugin/plugin.json', import.meta.url))
 const TERMINAL = 'com.superlogical.terminal'
+const POLL_MS = 50
+const WAIT_MS = 8000
 
+// A stand-in `rex` that logs each call and answers from environment variables.
 async function fakeRex(dir) {
   const bin = join(dir, 'bin')
   await mkdir(bin)
@@ -25,9 +31,11 @@ if (args.includes('events')) {
   for (const line of JSON.parse(process.env.FAKE_REX_EVENTS ?? '[]')) out(line)
 } else if (args.includes('whoami')) out('{"endpoint":"unix:///fake","instance_id":"fake"}')
 else if (args.includes('window')) out(process.env.FAKE_REX_WINDOWS)
-else if (args.includes('inspect')) out(process.env.FAKE_REX_VIEW)
 else if (args.includes('ls')) out(process.env.FAKE_REX_SESSIONS)
-else if (args.includes('call')) out('{}')
+else if (args.includes('call')) {
+  const method = args.at(-1)
+  out(method === 'program_status' ? process.env.FAKE_REX_STATUS : method === 'process' ? process.env.FAKE_REX_PROCESS : '{}')
+}
 `,
   )
   await chmod(join(bin, 'rex'), 0o755)
@@ -37,30 +45,95 @@ else if (args.includes('call')) out('{}')
 const withoutRexVariables = env =>
   Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith('REX_')))
 
+async function eventually(check) {
+  const deadline = Date.now() + WAIT_MS
+  for (;;) {
+    const value = await check()
+    if (value) return value
+    if (Date.now() > deadline) throw new Error('condition not met in time')
+    await sleep(POLL_MS)
+  }
+}
+
 async function scenario(run) {
   const dir = await mkdtemp(join(tmpdir(), 'rex-tab-status-fake-'))
+  const state = join(dir, 'state')
+  const log = join(dir, 'calls.log')
+  const bin = await fakeRex(dir)
+  await writeFile(log, '')
+  const env = {
+    ...withoutRexVariables(process.env),
+    PATH: bin + delimiter + process.env.PATH,
+    REX_TAB_STATUS_STATE: state,
+    FAKE_REX_LOG: log,
+  }
+  const lockFiles = async () =>
+    (await readdir(state).catch(() => [])).filter(n => n.endsWith('.lock'))
+  const stop = () => exec(process.execPath, [watcher, 'stop'], { env })
   try {
-    const bin = await fakeRex(dir)
-    const log = join(dir, 'calls.log')
-    await writeFile(log, '')
-    const env = {
-      ...withoutRexVariables(process.env),
-      PATH: bin + delimiter + process.env.PATH,
-      PLUGIN_DATA: join(dir, 'data'),
-      FAKE_REX_LOG: log,
-    }
     await run({
       dir,
       env,
+      state,
+      lockFiles,
+      stop,
       calls: async () => (await readFile(log, 'utf8')).split('\n').filter(Boolean),
     })
   } finally {
+    await stop().catch(() => {})
     await rm(dir, { recursive: true, force: true })
   }
 }
 
+const start = (env, extra = {}) =>
+  exec(process.execPath, [watcher, 'start'], { env: { ...env, ...extra } })
+
+test('start does nothing outside a Rex terminal', async () => {
+  await scenario(async ({ env, calls, lockFiles }) => {
+    const { stdout } = await start(env)
+    assert.equal(stdout, '')
+    await sleep(300)
+    assert.deepEqual(await calls(), [])
+    assert.deepEqual(await lockFiles(), [])
+  })
+})
+
+test('start does nothing when switched off', async () => {
+  await scenario(async ({ env, calls }) => {
+    await start(env, { REX_SESSION: 'session:s', REX_TAB_STATUS: 'off' })
+    await sleep(300)
+    assert.deepEqual(await calls(), [])
+  })
+})
+
+test('start prints nothing and runs one detached watcher that stop shuts down', async () => {
+  await scenario(async ({ env, lockFiles, calls, stop }) => {
+    const { stdout } = await start(env, { REX_SESSION: 'session:s' })
+    assert.equal(stdout, '')
+    const [name] = await eventually(async () => {
+      const files = await lockFiles()
+      return files.length > 0 ? files : undefined
+    })
+    const held = JSON.parse(await readFile(join(env.REX_TAB_STATUS_STATE, name), 'utf8'))
+    assert.equal(held.version, JSON.parse(await readFile(manifest, 'utf8')).version)
+    assert.equal(typeof held.startedAt, 'string')
+    await eventually(async () => (await calls()).some(c => c.includes('events --all --json')))
+
+    await start(env, { REX_SESSION: 'session:s' })
+    assert.equal((await lockFiles()).length, 1)
+
+    const { stdout: stopped } = await stop()
+    assert.match(stopped, /Stopped 1 watcher/)
+    assert.deepEqual(await lockFiles(), [])
+    assert.equal(
+      (await exec(process.execPath, [watcher, 'stop'], { env })).stdout.trim(),
+      'No watcher is running.',
+    )
+  })
+})
+
 test('the watcher survives malformed Rex data and keeps reading events', async () => {
-  await scenario(async ({ dir, env, calls }) => {
+  await scenario(async ({ env, calls, lockFiles }) => {
     Object.assign(env, {
       FAKE_REX_SESSIONS: JSON.stringify({ sessions: [null, 5, { session_id: 'session:a' }] }),
       FAKE_REX_WINDOWS: JSON.stringify({
@@ -78,55 +151,83 @@ test('the watcher survives malformed Rex data and keeps reading events', async (
           },
         ],
       }),
-      FAKE_REX_EVENTS: JSON.stringify([
-        'not json',
-        'null',
-        JSON.stringify({
-          type: 'session_event',
-          payload: { session_id: 'session:a', event: { type: 'block_event', payload: null } },
-        }),
-        JSON.stringify({
-          type: 'session_event',
-          payload: {
-            session_id: 'session:a',
-            event: { type: 'window_label_changed', payload: null },
+      FAKE_REX_STATUS: '{"records":[null,{"state":5},{"state":"done"}]}',
+      FAKE_REX_EVENTS: JSON.stringify(['not json', 'null', '{"type":"session_event"}', '[1]']),
+    })
+    await start(env, { REX_SESSION: 'session:s' })
+    await eventually(async () => (await calls()).some(c => c.includes('window ls -s session:a')))
+    assert.equal((await lockFiles()).length, 1)
+  })
+})
+
+test('a newer plugin version replaces a running older watcher', async () => {
+  await scenario(async ({ env, state, lockFiles }) => {
+    await mkdir(state, { recursive: true })
+    const old = spawn('sleep', ['30'], { stdio: 'ignore' })
+    const exited = new Promise(resolve => old.once('exit', resolve))
+    const key = createKey()
+    await writeFile(join(state, `${key}.lock`), JSON.stringify({ pid: old.pid, version: '0.0.1' }))
+    await start(env, { REX_SESSION: 'session:s' })
+    await exited
+    const held = await eventually(async () => {
+      const file = JSON.parse(await readFile(join(state, `${key}.lock`), 'utf8'))
+      return file.pid !== old.pid ? file : undefined
+    })
+    assert.notEqual(held.version, '0.0.1')
+    assert.equal((await lockFiles()).length, 1)
+  })
+})
+
+test('a watcher of the same or a newer version is left running', async () => {
+  await scenario(async ({ env, state, calls }) => {
+    await mkdir(state, { recursive: true })
+    const running = spawn('sleep', ['30'], { stdio: 'ignore' })
+    try {
+      const key = createKey()
+      await writeFile(
+        join(state, `${key}.lock`),
+        JSON.stringify({ pid: running.pid, version: '99.0.0' }),
+      )
+      await start(env, { REX_SESSION: 'session:s' })
+      await sleep(300)
+      assert.equal(running.exitCode, null)
+      assert.equal(JSON.parse(await readFile(join(state, `${key}.lock`), 'utf8')).pid, running.pid)
+      assert.equal(
+        (await calls()).some(c => c.includes('events')),
+        false,
+      )
+    } finally {
+      running.kill()
+    }
+  })
+})
+
+test('doctor flags an agent that runs without reporting status', async () => {
+  await scenario(async ({ env }) => {
+    Object.assign(env, {
+      FAKE_REX_SESSIONS: JSON.stringify({ sessions: [{ session_id: 'session:a', label: 'work' }] }),
+      FAKE_REX_WINDOWS: JSON.stringify({
+        windows: [
+          {
+            window_id: 'window:1',
+            label: 'tab',
+            layers: [{ blocks: [{ block_id: 'block:1', creator_name: TERMINAL }] }],
           },
-        }),
-        JSON.stringify({
-          type: 'session_created',
-          payload: { session: { session_id: 'session:b' } },
-        }),
-      ]),
+        ],
+      }),
+      FAKE_REX_STATUS: '{"records":[]}',
+      FAKE_REX_PROCESS: JSON.stringify({
+        foreground: { pid: 1, name: '2.1.325', argv0: 'claude' },
+      }),
     })
-    const { stderr } = await exec(process.execPath, [plugin, 'watch', 'unix:///fake', 'fake'], {
-      env,
-    })
-    assert.equal(stderr, '')
-    assert.ok(
-      (await calls()).some(call => call.includes('window ls -s session:b')),
-      'the event after the bad ones was handled',
-    )
-    assert.deepEqual(
-      (await readdir(join(dir, 'data'))).filter(name => name.endsWith('.pid')),
-      [],
+    const { stdout } = await exec(process.execPath, [watcher, 'doctor'], { env })
+    assert.match(
+      stdout,
+      /work \| tab \| block:1 \| claude \| no status <- runs an agent but sends no status/,
     )
   })
 })
 
-test('start does nothing outside a Rex terminal', async () => {
-  await scenario(async ({ env, calls }) => {
-    await exec(process.execPath, [plugin, 'start'], { env })
-    assert.deepEqual(await calls(), [])
-  })
-})
-
-for (const variable of ['REX_SESSION', 'REX_BLOCK', 'REX_SERVER']) {
-  test(`start asks Rex for its endpoint when ${variable} is set`, async () => {
-    await scenario(async ({ env, calls }) => {
-      await exec(process.execPath, [plugin, 'start'], {
-        env: { ...env, [variable]: 'unix:///fake' },
-      })
-      assert.ok((await calls()).some(call => call.includes('whoami')))
-    })
-  })
+function createKey() {
+  return createHash('sha256').update('unix:///fake/fake').digest('hex').slice(0, 16)
 }

@@ -1,33 +1,31 @@
 # AGENTS.md
 
-A Claude Code mod (`claude/hooks/register.ts`) and a Codex background watcher (`codex/hooks/watcher.mjs`) that prefix the Rex tab label with a state emoji. README.md describes the behavior.
+A plugin for Claude Code and Codex that prefixes the Rex tab label with a state emoji. One background watcher follows the status that agents report to Rex, so no per-agent code exists. README.md describes the behavior.
 
 ## Layout
 
-- `shared/` is the source of truth for code every harness uses: `core.ts` (the pure status logic), `paint.ts` and `themes.ts`.
-- `shared/core.ts` turns normalized events into the status to show: working, blocked, done, the idle wait and the ask grace. It reads no clock. `step` returns the timers it wants running, and each adapter starts them with its own clock through `Timers`.
-- `claude/` and `codex/` are complete plugin roots. Each holds its manifest, hook config, adapter and a generated copy of `shared/` in `hooks/vendor/`.
-- `harnesses.json` lists every harness: root, manifest, marketplace and vendor directory. Scripts and tests read it, so a new harness is one entry.
-- Never edit `hooks/vendor/`. Edit `shared/`, then run `npm run sync`.
+- `plugin/` is the only directory the hosts install. It holds the manifest, the SessionStart hook and the watcher in `src/`.
+- `status.mjs` reduces the status records of a pane, then of a window, to one state. `label.mjs` decides the label to write. Both are pure.
+- `tabs.mjs` reads Rex, applies those decisions and keeps the sleep timers. `watcher.mjs` is the entry point: `start` (the hook), `watch`, `stop` and `doctor`.
+- `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` both point at `./plugin`.
+- `tests/helpers/fake-rex.mjs` is a single-window Rex used by the unit tests.
 
 ## Commands
 
-- `npm test`: unit tests for the core, watcher, lock, tabs, themes, manifests and vendored copies. Needs Node 22.18 or newer.
-- `npm run test:plugin`: tests for the Claude mod in `claude/tests/`. Needs the `claude` CLI.
-- `npm run validate`: `claude plugin validate claude`. Run it after touching `claude/hooks/`.
-- `npm run sync`: copy `shared/` into every harness. `npm run sync:check` fails on drift.
-- `npm run version:check`: fail when a manifest disagrees with `package.json`.
-- `npm run test:integration`: needs a real `rex` on the `PATH`.
+- `npm test`: unit tests. Needs Node 22 or newer.
+- `npm run test:integration`: needs a real `rex` on the `PATH`. It starts its own server and emulates an agent.
+- `npm run validate`: `claude plugin validate` on the plugin and the marketplace. Needs the `claude` CLI.
 - `npm run format`: Prettier. CI fails on unformatted files.
 
 ## Gotchas
 
-- A hooks module may import only relative files and `claude-code`. Anything else, such as `node:fs`, stops the whole hook from loading and the tab never changes. `npm run validate` catches it. Keep `shared/` free of `node:*` imports for the same reason.
-- An installed plugin contains only its own root, so a harness can never import from outside it. That is why `shared/` is copied in.
-- A plugin installed from a local directory marketplace loads its hooks from the repo, not from `~/.claude/plugins/cache`. Reload with `/reload-plugins`. A session that started earlier keeps running the old code.
-- `tool.check` returns `ask` with `approver: 'person'` even when auto mode's classifier approves the call within a second or two. `ASK_GRACE_MS` in `shared/core.ts` keeps those from flashing ❓.
-- Never remove an icon from a theme in `themes.ts`. Tabs already showing it could no longer be cleaned.
-- `lock.mjs` and `rex-cli.mjs` are identical in rex-session-names. Keep both copies in sync.
+- The hook must print nothing and exit 0, because Claude adds its output to the conversation.
+- A running watcher keeps its old code after an update. `start` replaces it when the plugin version is higher, so bump the version for every change that users should receive. A dev checkout keeps the same version, so run `node plugin/src/watcher.mjs stop` after editing.
+- Rex keeps `done` and `error` records after their program exits, so `reduceBlock` only counts a record whose owner is the foreground process or one of its ancestors.
+- Rex trims labels on both ends and resets an empty one to `Window <hex>`. Our own writes come back as label events, so `isEcho` compares them with recent writes.
+- Rex does not derive labels from the terminal title. The watcher takes the name from the title of the focused agent pane.
+- Never remove an icon from a theme in `themes.mjs`. Tabs already showing it could no longer be cleaned.
+- Hosts copy and fingerprint the whole plugin directory. Keep it to the files the manifest test lists, with no symlinks and only Node built-ins.
 
 ## Style
 
@@ -35,19 +33,11 @@ A Claude Code mod (`claude/hooks/register.ts`) and a Codex background watcher (`
 - No em dashes and no semicolons in prose, comments, the changelog or release notes.
 - Keep changelog entries and commit messages short.
 
-## Adding a harness
-
-1. Create `<name>/` as the plugin root with its manifest and hook config.
-2. Add an entry to `harnesses.json`.
-3. Write a thin adapter that maps the host's events to `core.ts` events, starts the timers `step` asks for, and paints `shown` with `paint.ts`. It imports only from its own `hooks/vendor/`.
-4. Run `npm run sync`.
-5. Add the marketplace file, and tests for the adapter.
-
 ## Releasing
 
-1. Run `npm run bump -- X.Y.Z`. Use a patch bump for fixes and a minor bump for features.
+1. Set the version in `plugin/.claude-plugin/plugin.json`.
 2. Add a `## X.Y.Z` section at the top of `CHANGELOG.md`. The release workflow publishes it as the release notes.
-3. Run `npm test`, `npm run test:plugin`, `npm run validate`, `npm run sync:check` and `npm run format:check`.
+3. Run `npm test`, `npm run validate` and `npm run format:check`.
 4. Commit, then `git tag -a vX.Y.Z -m "<short summary>"` and push the branch and the tag.
 
-Pushing the tag runs `.github/workflows/release.yml`. It checks the tag against every manifest, runs the tests and creates the GitHub release. Do not create the release by hand.
+Pushing the tag runs `.github/workflows/release.yml`. It checks the tag against the manifest, runs the tests and creates the GitHub release. Do not create the release by hand.

@@ -1,283 +1,273 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { CodexTabs } from '../codex/hooks/tabs.mjs'
-import { IDLE_DELAY_MS } from '../shared/core.ts'
-import { BLOCK, createFakeRex, SESSION, TERMINAL, WINDOW } from './helpers/fake-rex.mjs'
+import { SLEEP_MS } from '../plugin/src/status.mjs'
+import { Tabs } from '../plugin/src/tabs.mjs'
+import {
+  BLOCK,
+  DEFAULT_LABEL,
+  SESSION,
+  TERMINAL,
+  WINDOW,
+  createFakeRex,
+  record,
+} from './helpers/fake-rex.mjs'
 
-function setup(label) {
-  const fake = createFakeRex({ label })
-  return { ...fake, tabs: new CodexTabs(fake.run) }
+function setup(options) {
+  const rex = createFakeRex(options)
+  const clock = { now: Date.now(), timers: [] }
+  const tabs = new Tabs({
+    run: rex.run,
+    now: () => clock.now,
+    setTimer: (fn, ms) => {
+      const timer = { ms, cancelled: false, unref() {} }
+      timer.fn = () => {
+        timer.cancelled = true
+        fn()
+      }
+      clock.timers.push(timer)
+      return timer
+    },
+    clearTimer: timer => {
+      timer.cancelled = true
+    },
+  })
+  const pending = () => clock.timers.filter(t => !t.cancelled)
+  return { rex, tabs, clock, pending }
 }
 
-async function advance(t, tabs, ms) {
-  t.mock.timers.tick(ms)
-  await Promise.resolve()
+const setRecords = (rex, ...records) => {
+  rex.blocks.get(BLOCK).records = records
+}
+const blockEvent = (name, payload = {}) => ({
+  type: 'session_event',
+  payload: {
+    session_id: SESSION,
+    event: {
+      type: 'block_event',
+      payload: { block_id: BLOCK, creator_name: TERMINAL, name, payload },
+    },
+  },
+})
+const sessionEvent = (type, payload) => ({
+  type: 'session_event',
+  payload: { session_id: SESSION, event: { type, payload } },
+})
+
+test('a working agent labels an unnamed tab with its title', async () => {
+  const { rex, tabs } = setup({ records: [record('working')] })
+  await tabs.refresh(SESSION)
+  assert.equal(rex.tab.label, '⏳ Fix login redirect | project')
+})
+
+test('each state shows its icon as the agent moves through a turn', async () => {
+  const { rex, tabs } = setup({ records: [record('idle')] })
+  const labels = []
+  for (const records of [
+    [record('idle')],
+    [record('working')],
+    [record('blocked', { kind: 'permission' })],
+    [record('working')],
+    [record('done')],
+    [record('error')],
+    [record('blocked', { kind: 'auth' })],
+  ]) {
+    setRecords(rex, ...records)
+    await tabs.refresh(SESSION)
+    labels.push(rex.tab.label.split(' ')[0])
+  }
+  assert.deepEqual(labels, ['Fix', '⏳', '❓', '⏳', '✅', '❌', '❌'])
+})
+
+test('a blocked permission ask shows even while a subagent keeps working', async () => {
+  const { rex, tabs } = setup({
+    records: [record('blocked', { kind: 'permission' }), record('working', { id: 'a1' })],
+  })
+  await tabs.refresh(SESSION)
+  assert.match(rex.tab.label, /^❓ /)
+})
+
+test('a tab you renamed keeps its name', async () => {
+  const { rex, tabs } = setup({ label: 'My tab', records: [record('working')] })
+  await tabs.refresh(SESSION)
+  assert.equal(rex.tab.label, '⏳ My tab')
+  rex.blocks.get(BLOCK).title = 'Something else'
+  setRecords(rex, record('done'))
+  await tabs.refresh(SESSION)
+  assert.equal(rex.tab.label, '✅ My tab')
+})
+
+test('the label follows the title of an unnamed tab', async () => {
+  const { rex, tabs } = setup({ records: [record('working')] })
+  await tabs.refresh(SESSION)
+  rex.blocks.get(BLOCK).title = '⠙ Review MR 123'
+  await tabs.handle(blockEvent('title_changed', { title: '⠙ Review MR 123' }))
+  assert.equal(rex.tab.label, '⏳ Review MR 123')
+})
+
+test('a spinner frame alone does not rewrite the label', async () => {
+  const { rex, tabs } = setup({ records: [record('working')] })
+  await tabs.refresh(SESSION)
+  const before = rex.calls.length
+  await tabs.handle(blockEvent('title_changed', { title: '⠸ Fix login redirect | project' }))
+  assert.equal(rex.calls.length, before)
+})
+
+test('the label returns to the default when the agent is gone', async () => {
+  const { rex, tabs } = setup({ records: [record('working')] })
+  await tabs.refresh(SESSION)
+  setRecords(rex)
+  await tabs.handle(blockEvent('program_status_removed'))
+  assert.equal(rex.tab.label, DEFAULT_LABEL)
+})
+
+test('a renamed tab gets its own name back when the agent is gone', async () => {
+  const { rex, tabs } = setup({ label: 'My tab', records: [record('working')] })
+  await tabs.refresh(SESSION)
+  setRecords(rex)
+  await tabs.refresh(SESSION)
+  assert.equal(rex.tab.label, 'My tab')
+})
+
+test('a finished record whose process exited is not an agent', async () => {
+  const { rex, tabs } = setup({ label: '✅ notes', records: [record('done')] })
+  rex.blocks.get(BLOCK).proc = { foreground: undefined }
+  await tabs.refresh(SESSION)
+  assert.equal(rex.tab.label, 'notes')
+})
+
+test('programs that are not allowed agents leave the tab alone', async () => {
+  const { rex, tabs } = setup({ records: [record('working', { app: 'brew' })] })
+  await tabs.refresh(SESSION)
+  assert.equal(rex.renames().length, 0)
+})
+
+test('a leftover prefix is cleaned on startup', async () => {
+  const { rex, tabs } = setup({ label: '⏳ notes' })
+  await tabs.refresh(SESSION)
+  assert.equal(rex.tab.label, 'notes')
+})
+
+test('our own label write is not treated as a rename', async () => {
+  const { rex, tabs } = setup({ records: [record('working')] })
+  await tabs.refresh(SESSION)
+  const before = rex.calls.length
+  await tabs.handle(
+    sessionEvent('window_label_changed', { window_id: WINDOW, label: rex.tab.label }),
+  )
+  assert.equal(rex.calls.length, before)
+})
+
+test('a rename by the person is picked up and kept', async () => {
+  const { rex, tabs } = setup({ records: [record('working')] })
+  await tabs.refresh(SESSION)
+  rex.tab.label = 'Release notes'
+  await tabs.handle(
+    sessionEvent('window_label_changed', { window_id: WINDOW, label: 'Release notes' }),
+  )
+  assert.equal(rex.tab.label, '⏳ Release notes')
+})
+
+test('a finished agent falls asleep five minutes after it came to rest', async () => {
+  const { rex, tabs, clock, pending } = setup({ records: [record('done')] })
+  await tabs.refresh(SESSION)
+  assert.match(rex.tab.label, /^✅ /)
+  const [timer] = pending()
+  assert.ok(timer.ms > SLEEP_MS - 5000 && timer.ms <= SLEEP_MS)
+  clock.now += SLEEP_MS
+  timer.fn()
   await tabs.painting
-}
+  assert.match(rex.tab.label, /^💤 /)
+  assert.equal(pending().length, 0)
+})
 
-function event(name, payload = {}) {
-  return {
+test('new work cancels the sleep timer', async () => {
+  const { rex, tabs, pending } = setup({ records: [record('done')] })
+  await tabs.refresh(SESSION)
+  assert.equal(pending().length, 1)
+  setRecords(rex, record('working'))
+  await tabs.refresh(SESSION)
+  assert.equal(pending().length, 0)
+  assert.match(rex.tab.label, /^⏳ /)
+})
+
+test('an agent that finished long ago is shown asleep at once', async () => {
+  const old = new Date(Date.now() - 2 * SLEEP_MS).toISOString()
+  const { rex, tabs, pending } = setup({ records: [record('done', { updated_at: old })] })
+  await tabs.refresh(SESSION)
+  assert.match(rex.tab.label, /^💤 /)
+  assert.equal(pending().length, 0)
+})
+
+test('a failed rename is retried by the next event and leaves state untouched', async () => {
+  const { rex, tabs } = setup({ records: [record('working')] })
+  const run = rex.run
+  let failing = true
+  tabs.run = async args => (failing && args[1] === 'rename' ? undefined : run(args))
+  await tabs.refresh(SESSION)
+  assert.equal(rex.tab.label, DEFAULT_LABEL)
+  failing = false
+  await tabs.refresh(SESSION)
+  assert.match(rex.tab.label, /^⏳ /)
+})
+
+test('an unreadable status leaves the tab alone', async () => {
+  const { rex, tabs } = setup({ label: '⏳ keep', records: [] })
+  const run = rex.run
+  tabs.run = async args => (args.at(-1) === 'program_status' ? undefined : run(args))
+  await tabs.refresh(SESSION)
+  assert.equal(rex.tab.label, '⏳ keep')
+})
+
+test('closing the window or destroying the session drops its state', async () => {
+  const { tabs, pending, rex } = setup({ records: [record('done')] })
+  await tabs.refresh(SESSION)
+  assert.equal(tabs.owned.size, 1)
+  await tabs.handle(sessionEvent('window_closed', { window_id: WINDOW }))
+  assert.equal(tabs.owned.size, 0)
+  assert.equal(pending().length, 0)
+  await tabs.refresh(SESSION)
+  assert.equal(tabs.owned.size, 1)
+  await tabs.handle({ type: 'session_destroyed', payload: { session_id: SESSION } })
+  assert.equal(tabs.owned.size, 0)
+  assert.equal(rex.tab.label.startsWith('✅'), true)
+})
+
+test('events from other blocks and unknown events are ignored', async () => {
+  const { rex, tabs } = setup({ records: [record('working')] })
+  await tabs.handle(null)
+  await tabs.handle({ type: 'session_event' })
+  await tabs.handle({ ...blockEvent('bell'), type: 'session_event' })
+  await tabs.handle({
     type: 'session_event',
     payload: {
       session_id: SESSION,
       event: {
         type: 'block_event',
-        payload: { block_id: BLOCK, creator_name: TERMINAL, name, payload },
+        payload: { block_id: BLOCK, creator_name: 'other', name: 'program_status_changed' },
       },
     },
-  }
-}
-
-test('Codex native status reports show active and completed states immediately', async () => {
-  const { blocks, tab, tabs } = setup()
-  for (const [state, emoji] of [
-    ['working', '⏳'],
-    ['blocked', '❓'],
-    ['working', '⏳'],
-    ['done', '✅'],
-    ['error', '❌'],
-  ]) {
-    blocks.get(BLOCK).records[0].state = state
-    await tabs.handle(event('program_status_changed'))
-    assert.equal(tab.label, `${emoji} Fix login redirect | project`)
-  }
-})
-
-test('idle shows no emoji until five minutes pass without further events', async t => {
-  t.mock.timers.enable({ apis: ['setTimeout'] })
-  const { tab, tabs } = setup()
-  await tabs.refresh(SESSION)
-  assert.equal(tab.label, 'Fix login redirect | project')
-  t.mock.timers.tick(IDLE_DELAY_MS - 1)
-  await tabs.handle(event('program_status_changed'))
-  assert.equal(tab.label, 'Fix login redirect | project')
-  await advance(t, tabs, 1)
-  assert.equal(tab.label, '💤 Fix login redirect | project')
-})
-
-for (const [state, emoji] of [
-  ['done', '✅'],
-  ['error', '❌'],
-]) {
-  test(`${state} stays visible during the five-minute idle delay`, async t => {
-    t.mock.timers.enable({ apis: ['setTimeout'] })
-    const { blocks, tab, tabs } = setup()
-    blocks.get(BLOCK).records[0].state = state
-    await tabs.refresh(SESSION)
-    blocks.get(BLOCK).records[0].state = 'idle'
-    await tabs.refresh(SESSION)
-    assert.equal(tab.label, `${emoji} Fix login redirect | project`)
-    t.mock.timers.tick(IDLE_DELAY_MS - 1)
-    await tabs.refresh(SESSION)
-    assert.equal(tab.label, `${emoji} Fix login redirect | project`)
-    await advance(t, tabs, 1)
-    assert.equal(tab.label, '💤 Fix login redirect | project')
   })
-}
-
-test('working and unanswered questions cancel the idle countdown', async t => {
-  t.mock.timers.enable({ apis: ['setTimeout'] })
-  const { blocks, tab, tabs } = setup()
-  await tabs.refresh(SESSION)
-  t.mock.timers.tick(IDLE_DELAY_MS - 1)
-  blocks.get(BLOCK).records[0].state = 'working'
-  await tabs.refresh(SESSION)
-  await advance(t, tabs, IDLE_DELAY_MS)
-  assert.equal(tab.label, '⏳ Fix login redirect | project')
-  blocks.get(BLOCK).records[0].state = 'idle'
-  await tabs.refresh(SESSION)
-  blocks.get(BLOCK).title = '[ ! ] Action Required | Fix login redirect | project'
-  await tabs.refresh(SESSION)
-  await advance(t, tabs, IDLE_DELAY_MS)
-  assert.equal(tab.label, '❓ Fix login redirect | project')
-  blocks.get(BLOCK).title = 'Fix login redirect | project'
-  await tabs.refresh(SESSION)
-  t.mock.timers.tick(IDLE_DELAY_MS - 1)
-  await tabs.refresh(SESSION)
-  assert.equal(tab.label, 'Fix login redirect | project')
+  assert.equal(rex.calls.length, 0)
 })
 
-test('shutdown cancels deferred idle repainting', async t => {
-  t.mock.timers.enable({ apis: ['setTimeout'] })
-  const { tab, tabs, calls } = setup()
+test('status events repaint the window', async () => {
+  const { rex, tabs } = setup({ records: [record('working')] })
+  await tabs.handle(blockEvent('program_status_changed', { record: { state: 'working' } }))
+  assert.match(rex.tab.label, /^⏳ /)
+})
+
+test('stopping restores every label and cancels timers', async () => {
+  const { rex, tabs, pending } = setup({ records: [record('done')] })
+  await tabs.refresh(SESSION)
+  assert.match(rex.tab.label, /^✅ /)
+  await tabs.restore()
+  assert.equal(rex.tab.label, DEFAULT_LABEL)
+  assert.equal(pending().length, 0)
+})
+
+test('stopping gives a renamed tab its plain name back', async () => {
+  const { rex, tabs } = setup({ label: 'My tab', records: [record('working')] })
   await tabs.refresh(SESSION)
   await tabs.restore()
-  const before = calls.length
-  await advance(t, tabs, IDLE_DELAY_MS)
-  assert.equal(calls.length, before)
-  assert.equal(tab.label, 'Window 0000beef')
-})
-
-test('child work and questions remain visible after the root finishes', async () => {
-  const { blocks, tab, tabs } = setup()
-  const records = blocks.get(BLOCK).records
-  records[0].state = 'done'
-  records.push({ id: 'agent', effective_app: 'codex', state: 'blocked' })
-  await tabs.refresh(SESSION)
-  assert.equal(tab.label, '❓ Fix login redirect | project')
-  records[1].state = 'working'
-  await tabs.handle(event('program_status_changed'))
-  assert.equal(tab.label, '⏳ Fix login redirect | project')
-  records.pop()
-  await tabs.handle(event('program_status_removed'))
-  assert.equal(tab.label, '✅ Fix login redirect | project')
-})
-
-test('async questions show blocked even while native status stays working', async () => {
-  const { blocks, tab, tabs, calls } = setup()
-  const block = blocks.get(BLOCK)
-  block.records[0].state = 'working'
-  await tabs.refresh(SESSION)
-  block.title = '[ ! ] Action Required | Fix login redirect | project'
-  await tabs.handle(event('title_changed', { title: block.title }))
-  assert.equal(tab.label, '❓ Fix login redirect | project')
-  const before = calls.length
-  block.title = '[ . ] Action Required | Fix login redirect | project'
-  await tabs.handle(event('title_changed', { title: block.title }))
-  assert.equal(calls.length, before)
-  block.title = '⠸ Fix login redirect | project'
-  await tabs.handle(event('title_changed', { title: block.title }))
-  assert.equal(tab.label, '⏳ Fix login redirect | project')
-})
-
-test('async questions preserve custom names and ordinary title text is not an input signal', async () => {
-  const { blocks, tab, tabs } = setup('deploy')
-  const block = blocks.get(BLOCK)
-  block.records[0].state = 'working'
-  block.title = '[ ! ] Action Required | Fix login redirect | project'
-  await tabs.refresh(SESSION)
-  assert.equal(tab.label, '❓ deploy')
-  block.title = 'Action Required for this project'
-  await tabs.handle(event('title_changed', { title: block.title }))
-  assert.equal(tab.label, '⏳ deploy')
-})
-
-test('an old process title cannot mark the current Codex process as blocked', async () => {
-  const { blocks, tab, tabs } = setup()
-  const block = blocks.get(BLOCK)
-  block.records[0].state = 'working'
-  block.title = '[ ! ] Action Required | old task'
-  block.titleOwner = { pid: 99, name: 'other' }
-  await tabs.refresh(SESSION)
-  assert.ok(tab.label.startsWith('⏳ '))
-})
-
-test('foreign statuses and stale reports from exited Codex processes leave labels alone', async () => {
-  const { blocks, tab, tabs } = setup('✅ Claude task')
-  const block = blocks.get(BLOCK)
-  block.records[0].app = 'claude'
-  await tabs.refresh(SESSION)
-  assert.equal(tab.label, '✅ Claude task')
-  block.records[0].app = 'codex'
-  block.foreground = { pid: 20, name: 'zsh' }
-  await tabs.refresh(SESSION)
-  assert.equal(tab.label, '✅ Claude task')
-  await tabs.restore()
-  assert.equal(tab.label, '✅ Claude task')
-})
-
-test('auto names follow title changes without following spinner ticks', async () => {
-  const { blocks, tab, tabs, calls } = setup()
-  await tabs.refresh(SESSION)
-  const before = calls.length
-  await tabs.handle(event('title_changed', { title: '⠸ Fix login redirect | project' }))
-  assert.equal(calls.length, before)
-  blocks.get(BLOCK).title = '⠸ Second topic'
-  await tabs.handle(event('title_changed', { title: '⠸ Second topic' }))
-  assert.equal(tab.label, 'Second topic')
-  await tabs.restore()
-  assert.equal(tab.label, 'Window 0000beef')
-})
-
-test('a manual rename during a turn is preserved when Codex exits', async () => {
-  const { blocks, tab, tabs } = setup()
-  await tabs.refresh(SESSION)
-  tab.label = 'deploy $(keep-this-literal)'
-  await tabs.handle({
-    type: 'session_event',
-    payload: {
-      session_id: SESSION,
-      event: { type: 'window_label_changed', payload: { window_id: WINDOW, label: tab.label } },
-    },
-  })
-  assert.equal(tab.label, 'deploy $(keep-this-literal)')
-  blocks.get(BLOCK).foreground = { pid: 20, name: 'zsh' }
-  await tabs.handle(event('process_changed'))
-  assert.equal(tab.label, 'deploy $(keep-this-literal)')
-})
-
-test('cleanup does not remove a prefix written by another adapter', async () => {
-  const { tab, tabs } = setup()
-  await tabs.refresh(SESSION)
-  tab.label = '❓ Claude task'
-  await tabs.restore()
-  assert.equal(tab.label, '❓ Claude task')
-})
-
-test('Claude owns mixed split tabs during updates and cleanup', async () => {
-  const { blocks, tab, tabs } = setup()
-  await tabs.refresh(SESSION)
-  blocks.set('block:claude', {
-    title: 'Claude task',
-    foreground: { pid: 30, name: 'claude' },
-    records: [],
-  })
-  tab.label = '❓ Claude task'
-  blocks.get(BLOCK).records[0].state = 'working'
-  await tabs.handle(event('program_status_changed'))
-  assert.equal(tab.label, '❓ Claude task')
-  await tabs.restore()
-  assert.equal(tab.label, '❓ Claude task')
-})
-
-test('multiple Codex panes contribute to one tab status', async () => {
-  const { blocks, tab, tabs } = setup()
-  blocks.get(BLOCK).records[0].state = 'done'
-  blocks.set('block:b2', {
-    title: 'Second pane',
-    foreground: { pid: 20, name: 'codex' },
-    records: [{ state: 'blocked', app: 'codex' }],
-  })
-  await tabs.refresh(SESSION)
-  assert.equal(tab.label, '❓ Fix login redirect | project')
-  blocks.get('block:b2').records[0].state = 'working'
-  await tabs.refresh(SESSION)
-  assert.equal(tab.label, '⏳ Fix login redirect | project')
-})
-
-test('an unreadable sibling process cannot expose a Claude label to Codex updates or cleanup', async () => {
-  const { blocks, tab, run } = setup()
-  let processFails = false
-  const tabs = new CodexTabs(args =>
-    processFails && args.at(-1) === 'process' ? undefined : run(args),
-  )
-  await tabs.refresh(SESSION)
-  blocks.set('block:claude', {
-    title: 'Claude task',
-    foreground: { pid: 30, name: 'claude' },
-    records: [],
-  })
-  processFails = true
-  const label = tab.label
-  blocks.get(BLOCK).records[0].state = 'working'
-  await tabs.refresh(SESSION)
-  assert.equal(tab.label, label)
-  await tabs.restore()
-  assert.equal(tab.label, label)
-})
-
-test('a failed rename retains ownership so a later title change is still automatic', async () => {
-  const { blocks, tab, run } = setup()
-  let failRename = false
-  const tabs = new CodexTabs(args =>
-    failRename && args[0] === 'window' && args[1] === 'rename' ? undefined : run(args),
-  )
-  await tabs.refresh(SESSION)
-  failRename = true
-  blocks.get(BLOCK).title = 'Second topic'
-  await tabs.refresh(SESSION)
-  assert.equal(tab.label, 'Fix login redirect | project')
-  failRename = false
-  await tabs.refresh(SESSION)
-  assert.equal(tab.label, 'Second topic')
+  assert.equal(rex.tab.label, 'My tab')
 })

@@ -1,6 +1,7 @@
 {
   "name": "rex-tab-status",
-  "version": "0.5.1",
+  "version": "1.0.0",
   "description": "Prefix the Rex tab label with an emoji for the coding agent's state",
-  "hooks": "./hooks/codex.json"
+  "author": { "name": "Daan Rosendal" },
+  "license": "MIT"
 }

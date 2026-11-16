@@ -4,7 +4,7 @@
   "plugins": [
     {
       "name": "rex-tab-status",
-      "source": { "source": "local", "path": "./codex" }
+      "source": { "source": "local", "path": "./plugin" }
     }
   ]
 }

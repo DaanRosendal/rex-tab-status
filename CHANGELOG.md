@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0
+
+- Rewrite around the status that Claude Code and Codex report to Rex. One background watcher mirrors it into the tab label, so the per-agent hooks and their timing guesses are gone.
+- Any agent that reports its status to Rex works. `REX_TAB_STATUS_APPS` lists the allowed apps and defaults to `claude-code,codex`.
+- A permission ask from a background subagent shows ❓ at once. Rejected credentials show ❌.
+- The plugin installs once for both agents from `plugin/`. A newer plugin version replaces the running watcher.
+- Add `stop` and `doctor` commands, and `REX_TAB_STATUS=off` to disable it.
+- Require Claude Code 2.1.325 or newer and Codex 0.169 or newer.
+
 ## 0.5.1
 
 - Stop the ❓ from flickering while background subagents run. Their permission asks are never dialogs, so they no longer show ❓ until the tool finishes.

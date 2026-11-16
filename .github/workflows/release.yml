@@ -15,10 +15,13 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - name: Check the tag against every manifest and the vendored copies
+      - name: Check the tag against the manifest
         run: |
-          node scripts/version.mjs --check "$GITHUB_REF_NAME"
-          node scripts/sync.mjs --check
+          version=$(node -p "require('./plugin/.claude-plugin/plugin.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match manifest version $version"
+            exit 1
+          fi
       - run: npm test
       - name: Extract the changelog section
         run: |
