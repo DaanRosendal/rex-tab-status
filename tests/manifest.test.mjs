@@ -60,3 +60,32 @@ test('plugin code imports only relative files and Node built-ins', async () => {
       assert.match(specifier, /^(\.\/|node:)/, `${name} imports ${specifier}`)
   }
 })
+
+test('the hook starts asynchronously with time to replace an old watcher', async () => {
+  const { hooks } = await read('plugin/hooks/hooks.json')
+  const [hook] = hooks.SessionStart[0].hooks
+  assert.equal(hook.async, true)
+  assert.ok(hook.timeout >= 10)
+})
+
+test('the changelog leads with the manifest version', async () => {
+  const { version } = await read('plugin/.claude-plugin/plugin.json')
+  const changelog = await readFile(join(root, 'CHANGELOG.md'), 'utf8')
+  assert.equal(changelog.match(/^## (\S+)/m)[1], version)
+})
+
+test('the README documents every icon and every setting the code reads', async () => {
+  const readme = await readFile(join(root, 'README.md'), 'utf8')
+  const { THEMES } = await import('../plugin/src/themes.mjs')
+  for (const icons of Object.values(THEMES))
+    for (const icon of Object.values(icons))
+      assert.ok(readme.includes(icon), `README is missing ${icon}`)
+  const variables = new Set()
+  for (const name of await readdir(join(root, 'plugin/src')))
+    for (const [variable] of (await readFile(join(root, 'plugin/src', name), 'utf8')).matchAll(
+      /REX_TAB_STATUS(_[A-Z]+)?/g,
+    ))
+      if (variable !== 'REX_TAB_STATUS_STATE') variables.add(variable)
+  for (const variable of variables)
+    assert.ok(readme.includes(`\`${variable}\``), `README is missing ${variable}`)
+})

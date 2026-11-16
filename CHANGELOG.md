@@ -6,7 +6,7 @@
 - Any agent that reports its status to Rex works. `REX_TAB_STATUS_APPS` lists the allowed apps and defaults to `claude-code,codex`.
 - A permission ask from a background subagent shows ❓ at once. Rejected credentials show ❌.
 - The plugin installs once for both agents from `plugin/`. A newer plugin version replaces the running watcher.
-- Add `stop` and `doctor` commands, and `REX_TAB_STATUS=off` to disable it.
+- Add `REX_TAB_STATUS=off` to disable it. If you ran 0.x, stop its old watchers once with the command in the README.
 - Require Claude Code 2.1.325 or newer and Codex 0.169 or newer.
 
 ## 0.5.1

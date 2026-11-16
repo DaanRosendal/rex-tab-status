@@ -57,7 +57,8 @@ export function reduceBlock(records, { proc, apps = DEFAULT_APPS } = {}) {
     if (isChild && !['working', 'blocked', 'auth'].includes(shown)) continue
     if (RANK[shown] > RANK[state]) state = shown
     const at = Date.parse(record.updated_at)
-    if (!isChild && (shown === 'done' || shown === 'error') && Number.isFinite(at)) restAt = at
+    if (!isChild && (shown === 'done' || shown === 'error') && Number.isFinite(at))
+      restAt = Math.max(restAt ?? at, at)
   }
   return { state, hasAgent, restAt }
 }

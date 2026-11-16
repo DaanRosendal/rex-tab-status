@@ -26,6 +26,7 @@ async function fakeRex(dir) {
 const { appendFileSync } = require('node:fs')
 const args = process.argv.slice(2)
 appendFileSync(process.env.FAKE_REX_LOG, args.join(' ') + '\\n')
+if (process.env.FAKE_REX_FAIL) process.exit(3)
 const out = text => process.stdout.write((text ?? '') + '\\n')
 if (args.includes('events')) {
   for (const line of JSON.parse(process.env.FAKE_REX_EVENTS ?? '[]')) out(line)
@@ -160,18 +161,30 @@ test('the watcher survives malformed Rex data and keeps reading events', async (
   })
 })
 
+// Looks like a running watcher to the identity check, without needing a Rex server.
+function standInWatcher() {
+  const child = spawn(
+    process.execPath,
+    ['-e', 'setInterval(() => {}, 1000)', 'watcher.mjs', 'watch'],
+    { stdio: 'ignore' },
+  )
+  return { child, exited: new Promise(resolve => child.once('exit', resolve)) }
+}
+
 test('a newer plugin version replaces a running older watcher', async () => {
   await scenario(async ({ env, state, lockFiles }) => {
     await mkdir(state, { recursive: true })
-    const old = spawn('sleep', ['30'], { stdio: 'ignore' })
-    const exited = new Promise(resolve => old.once('exit', resolve))
+    const old = standInWatcher()
     const key = createKey()
-    await writeFile(join(state, `${key}.lock`), JSON.stringify({ pid: old.pid, version: '0.0.1' }))
+    await writeFile(
+      join(state, `${key}.lock`),
+      JSON.stringify({ pid: old.child.pid, version: '0.0.1' }),
+    )
     await start(env, { REX_SESSION: 'session:s' })
-    await exited
+    await old.exited
     const held = await eventually(async () => {
       const file = JSON.parse(await readFile(join(state, `${key}.lock`), 'utf8'))
-      return file.pid !== old.pid ? file : undefined
+      return file.pid !== old.child.pid ? file : undefined
     })
     assert.notEqual(held.version, '0.0.1')
     assert.equal((await lockFiles()).length, 1)
@@ -181,24 +194,65 @@ test('a newer plugin version replaces a running older watcher', async () => {
 test('a watcher of the same or a newer version is left running', async () => {
   await scenario(async ({ env, state, calls }) => {
     await mkdir(state, { recursive: true })
-    const running = spawn('sleep', ['30'], { stdio: 'ignore' })
+    const running = standInWatcher()
     try {
       const key = createKey()
       await writeFile(
         join(state, `${key}.lock`),
-        JSON.stringify({ pid: running.pid, version: '99.0.0' }),
+        JSON.stringify({ pid: running.child.pid, version: '99.0.0' }),
       )
       await start(env, { REX_SESSION: 'session:s' })
       await sleep(300)
-      assert.equal(running.exitCode, null)
-      assert.equal(JSON.parse(await readFile(join(state, `${key}.lock`), 'utf8')).pid, running.pid)
+      assert.equal(running.child.exitCode, null)
+      assert.equal(
+        JSON.parse(await readFile(join(state, `${key}.lock`), 'utf8')).pid,
+        running.child.pid,
+      )
       assert.equal(
         (await calls()).some(c => c.includes('events')),
         false,
       )
     } finally {
-      running.kill()
+      running.child.kill()
     }
+  })
+})
+
+test('a recycled pid in the lock is neither trusted nor killed', async () => {
+  await scenario(async ({ env, state, lockFiles, stop }) => {
+    await mkdir(state, { recursive: true })
+    const bystander = spawn('sleep', ['30'], { stdio: 'ignore' })
+    try {
+      const key = createKey()
+      await writeFile(
+        join(state, `${key}.lock`),
+        JSON.stringify({ pid: bystander.pid, version: '0.0.1' }),
+      )
+      await start(env, { REX_SESSION: 'session:s' })
+      const held = await eventually(async () => {
+        const file = JSON.parse(await readFile(join(state, `${key}.lock`), 'utf8'))
+        return file.pid !== bystander.pid ? file : undefined
+      })
+      assert.equal(typeof held.pid, 'number')
+      assert.equal(bystander.exitCode, null)
+      assert.equal(bystander.signalCode, null)
+      await stop()
+      assert.equal(bystander.exitCode, null)
+      assert.equal(bystander.signalCode, null)
+      assert.deepEqual(await lockFiles(), [])
+    } finally {
+      bystander.kill()
+    }
+  })
+})
+
+test('start prints nothing and succeeds when rex fails', async () => {
+  await scenario(async ({ env, calls, lockFiles }) => {
+    const { stdout, stderr } = await start(env, { REX_SESSION: 'session:s', FAKE_REX_FAIL: '1' })
+    assert.equal(stdout, '')
+    assert.equal(stderr, '')
+    assert.ok((await calls()).length > 0)
+    assert.deepEqual(await lockFiles(), [])
   })
 })
 

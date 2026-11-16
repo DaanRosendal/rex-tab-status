@@ -80,6 +80,14 @@ test('a finished root reports when it came to rest', () => {
 
 const block = (state, extra = {}) => ({ id: 'b', state, hasAgent: state !== 'none', ...extra })
 
+test('the latest finished root decides when the agent came to rest, whatever the record order', () => {
+  const early = rec('done', { updated_at: '2026-11-16T21:00:00.000Z' })
+  const late = rec('error', { updated_at: '2026-11-16T21:30:00.000Z' })
+  const expected = Date.parse('2026-11-16T21:30:00.000Z')
+  assert.equal(reduceBlock([early, late], { proc }).restAt, expected)
+  assert.equal(reduceBlock([late, early], { proc }).restAt, expected)
+})
+
 test('a window shows the highest state across its panes', () => {
   const view = reduceWindow([block('done', { restAt: 0 }), block('working')], 1)
   assert.equal(view.state, 'working')

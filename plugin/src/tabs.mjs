@@ -11,12 +11,10 @@ import {
 import { resolveTheme } from './themes.mjs'
 
 const TERMINAL = 'com.superlogical.terminal'
-const REFRESH_EVENTS = [
-  'program_status_changed',
-  'program_status_removed',
-  'process_changed',
-  'child_exited',
-]
+const MAX_TIMER_MS = 2 ** 31 - 1
+// Any report can start an agent. The others only matter for panes already known to run one.
+const ALWAYS_REFRESH = ['program_status_changed', 'program_status_removed']
+const KNOWN_PANE_EVENTS = ['process_changed', 'child_exited']
 
 export function parseWindows(text) {
   const windows = parse(text)?.windows
@@ -33,6 +31,7 @@ export class Tabs {
   owned = new Map()
   titles = new Map()
   timers = new Map()
+  agentBlocks = new Set()
   painting = Promise.resolve()
   stopping = false
 
@@ -80,13 +79,17 @@ export class Tabs {
       call('process'),
       call('title'),
     ])
-    if (statusText === undefined) return undefined
+    // Without both reads a finished agent could look gone or a gone agent finished.
+    if (statusText === undefined || processText === undefined) return undefined
     const proc = parse(processText)
     const reduced = reduceBlock(parse(statusText)?.records ?? [], { proc, apps: this.apps })
     const terminalTitle = parse(titleText)
     const text = typeof terminalTitle?.title === 'string' ? terminalTitle.title : ''
     const title = isLive(terminalTitle?.owner, liveOwners(proc)) ? cleanTitle(text) : ''
-    this.titles.set(`${session}/${blockId}`, cleanTitle(text))
+    const key = `${session}/${blockId}`
+    this.titles.set(key, cleanTitle(text))
+    if (reduced.hasAgent) this.agentBlocks.add(key)
+    else this.agentBlocks.delete(key)
     return { id: blockId, title, ...reduced }
   }
 
@@ -96,11 +99,17 @@ export class Tabs {
     const reports = await Promise.all(terminals.map(b => this.inspect(session, b.block_id)))
     if (reports.includes(undefined)) return
 
+    // The reads above take a while, so the label is read again to not overwrite a rename made meanwhile.
+    const fresh = parseWindows(await this.run(['window', 'ls', '-s', session, '--json']))?.find(
+      w => w.window_id === win.window_id,
+    )
+    if (!fresh) return
+
     const now = this.now()
     const view = reduceWindow(reports, now)
-    const source = pickTitleSource(reports, win.focused_block_id)
+    const source = pickTitleSource(reports, fresh.focused_block_id)
     const result = decideLabel({
-      actual: win.label,
+      actual: fresh.label,
       own: this.owned.get(key),
       hasAgent: view.hasAgent,
       icon: view.iconKey ? this.icons[view.iconKey] : '',
@@ -127,13 +136,11 @@ export class Tabs {
   schedule(key, session, window, view, now) {
     this.cancel(key)
     if (view.sleeping || view.wakeAt === undefined) return
-    const timer = this.setTimer(
-      () => {
-        this.timers.delete(key)
-        this.refresh(session, { window })
-      },
-      Math.max(0, view.wakeAt - now),
-    )
+    const delay = Math.min(Math.max(0, view.wakeAt - now), MAX_TIMER_MS)
+    const timer = this.setTimer(() => {
+      this.timers.delete(key)
+      this.refresh(session, { window })
+    }, delay)
     timer.unref?.()
     this.timers.set(key, timer)
   }
@@ -155,8 +162,8 @@ export class Tabs {
       const session = event.payload?.session_id
       if (typeof session !== 'string') return
       for (const key of [...this.owned.keys()]) if (key.startsWith(`${session}/`)) this.forget(key)
-      for (const key of [...this.titles.keys()])
-        if (key.startsWith(`${session}/`)) this.titles.delete(key)
+      for (const map of [this.titles, this.agentBlocks])
+        for (const key of [...map.keys()]) if (key.startsWith(`${session}/`)) map.delete(key)
       return
     }
     if (event?.type === 'session_created') {
@@ -171,12 +178,15 @@ export class Tabs {
     if (change.type === 'block_event') {
       const { block_id: block, creator_name: creator, name, payload } = change.payload ?? {}
       if (creator !== TERMINAL || typeof block !== 'string') return
+      const key = `${session}/${block}`
       if (name === 'title_changed') {
-        if (typeof payload?.title !== 'string') return
+        if (typeof payload?.title !== 'string' || !this.agentBlocks.has(key)) return
         const title = cleanTitle(payload.title)
-        if (this.titles.get(`${session}/${block}`) === title) return
-        this.titles.set(`${session}/${block}`, title)
-      } else if (!REFRESH_EVENTS.includes(name)) return
+        if (this.titles.get(key) === title) return
+        this.titles.set(key, title)
+      } else if (KNOWN_PANE_EVENTS.includes(name)) {
+        if (!this.agentBlocks.has(key)) return
+      } else if (!ALWAYS_REFRESH.includes(name)) return
       await this.refresh(session, { block })
     } else if (change.type === 'window_label_changed') {
       const { window_id: window, label } = change.payload ?? {}
@@ -186,8 +196,11 @@ export class Tabs {
     } else if (change.type === 'window_closed') {
       this.forget(`${session}/${change.payload?.window_id}`)
     } else if (['block_created', 'block_closed', 'session_label_changed'].includes(change.type)) {
-      if (change.type === 'block_closed')
-        this.titles.delete(`${session}/${change.payload?.block_id}`)
+      if (change.type === 'block_closed') {
+        const key = `${session}/${change.payload?.block_id}`
+        this.titles.delete(key)
+        this.agentBlocks.delete(key)
+      }
       await this.refresh(session)
     }
   }
@@ -195,13 +208,18 @@ export class Tabs {
   async restore() {
     this.stopping = true
     await this.painting
+    const labels = new Map()
     for (const [key, own] of [...this.owned]) {
       this.cancel(key)
       const slash = key.indexOf('/')
       const session = key.slice(0, slash)
       const window = key.slice(slash + 1)
-      const windows = parseWindows(await this.run(['window', 'ls', '-s', session, '--json'])) ?? []
-      const win = windows.find(w => w.window_id === window)
+      if (!labels.has(session))
+        labels.set(
+          session,
+          parseWindows(await this.run(['window', 'ls', '-s', session, '--json'])) ?? [],
+        )
+      const win = labels.get(session).find(w => w.window_id === window)
       if (!win) continue
       const { write } = decideLabel({ actual: win.label, own, hasAgent: false })
       if (write !== undefined)

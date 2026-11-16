@@ -114,14 +114,23 @@ test('when the agent leaves, an auto-named tab returns to the default and a manu
   })
 })
 
-test('a leftover prefix with no agent is cleaned and a plain tab is untouched', () => {
-  assert.deepEqual(decideLabel({ hasAgent: false, actual: '⏳ notes' }), {
-    own: undefined,
-    write: 'notes',
-  })
-  assert.deepEqual(decideLabel({ hasAgent: false, actual: '✅' }), { own: undefined, write: '' })
-  assert.deepEqual(decideLabel({ hasAgent: false, actual: 'notes' }), { own: undefined })
-  assert.deepEqual(decideLabel({ hasAgent: false, actual: DEFAULT }), { own: undefined })
+test('a tab we never owned is left alone, even when its name looks like a status', () => {
+  for (const actual of [
+    '✅ release checklist',
+    '[ok] tests',
+    '◆ infra',
+    '⏳ notes',
+    '✅',
+    'notes',
+    DEFAULT,
+  ])
+    assert.deepEqual(decideLabel({ hasAgent: false, actual }), { own: undefined })
+})
+
+test('a title cut at the limit never splits an emoji', () => {
+  const cut = cleanTitle(`${'a'.repeat(59)}😀😀`)
+  assert.equal(cut.isWellFormed(), true)
+  assert.equal([...cut].length <= 60, true)
 })
 
 test('after a watcher restart a tab already showing the current title counts as auto-named', () => {

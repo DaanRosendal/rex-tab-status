@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, utimes, writeFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -72,4 +72,38 @@ test('versions compare numerically', () => {
 test('a live process is alive and a missing one is not', () => {
   assert.equal(isAlive(process.pid), true)
   assert.equal(isAlive(999999999), false)
+})
+
+test('concurrent claims on a stale lock have exactly one winner', async t => {
+  const path = await lockPath(t)
+  for (let round = 0; round < 100; round++) {
+    await writeFile(path, JSON.stringify({ pid: 999999999, version: '1.0.0' }))
+    const claims = await Promise.all(Array.from({ length: 4 }, () => claimLock(path)))
+    const winners = claims.filter(Boolean)
+    assert.equal(winners.length, 1, `round ${round}`)
+    await winners[0]()
+    await unlink(`${path}.reclaim`).catch(() => {})
+  }
+})
+
+test('a pid that is alive but not a holder does not block a claim', async t => {
+  const path = await lockPath(t)
+  await writeFile(path, JSON.stringify({ pid: process.pid, version: '1.0.0' }))
+  assert.equal(await claimLock(path), undefined)
+  const release = await claimLock(path, {}, { isHolder: async () => false })
+  assert.equal(typeof release, 'function')
+  await release()
+})
+
+test('a reclaim guard left behind by a crash is cleared after its grace period', async t => {
+  const path = await lockPath(t)
+  await writeFile(path, JSON.stringify({ pid: 999999999 }))
+  await writeFile(`${path}.reclaim`, '')
+  assert.equal(await claimLock(path), undefined)
+  const earlier = new Date(Date.now() - 10000)
+  await utimes(`${path}.reclaim`, earlier, earlier)
+  assert.equal(await claimLock(path), undefined)
+  const release = await claimLock(path)
+  assert.equal(typeof release, 'function')
+  await release()
 })

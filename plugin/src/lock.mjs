@@ -32,8 +32,39 @@ export function compareVersions(a, b) {
   return 0
 }
 
-// Returns a release function, or undefined when a live process already holds the lock.
-export async function claimLock(path, info = {}) {
+async function isStale(path, isHolder) {
+  const held = await readLock(path)
+  if (held) return !(await isHolder(held.pid))
+  const file = await stat(path).catch(() => undefined)
+  return !file || Date.now() - file.mtimeMs >= PARTIAL_LOCK_GRACE_MS
+}
+
+// Only the holder of the guard file removes a stale lock, and it checks again under the guard, so
+// two claimers never remove each other's fresh lock.
+async function removeStale(path, isHolder) {
+  const guard = `${path}.reclaim`
+  let file
+  try {
+    file = await open(guard, 'wx', 0o600)
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error
+    const age = Date.now() - ((await stat(guard).catch(() => undefined))?.mtimeMs ?? Date.now())
+    if (age >= PARTIAL_LOCK_GRACE_MS) await unlink(guard).catch(() => {})
+    return false
+  }
+  try {
+    if (!(await isStale(path, isHolder))) return false
+    await unlink(path).catch(() => {})
+    return true
+  } finally {
+    await file.close()
+    await unlink(guard).catch(() => {})
+  }
+}
+
+// Returns a release function, or undefined when a live holder already has the lock. `isHolder`
+// tells whether a pid still belongs to a holder, so a recycled pid does not block a claim.
+export async function claimLock(path, info = {}, { isHolder = isAlive } = {}) {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const file = await open(path, 'wx', 0o600)
@@ -44,14 +75,7 @@ export async function claimLock(path, info = {}) {
       }
     } catch (error) {
       if (error.code !== 'EEXIST') throw error
-      const held = await readLock(path)
-      if (!held) {
-        const file = await stat(path).catch(() => undefined)
-        if (!file || Date.now() - file.mtimeMs < PARTIAL_LOCK_GRACE_MS) return
-      } else if (isAlive(held.pid)) {
-        return
-      }
-      await unlink(path).catch(() => {})
+      if (!(await isStale(path, isHolder)) || !(await removeStale(path, isHolder))) return
     }
   }
 }

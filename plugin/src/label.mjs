@@ -13,7 +13,8 @@ export function cleanTitle(text) {
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
     .trim()
     .replace(SPINNER, '')
-  return stripIcons(plain.trim()).slice(0, MAX_NAME_LENGTH).trim()
+  // Cutting by code point keeps an emoji at the limit whole, which Rex would otherwise echo differently.
+  return [...stripIcons(plain.trim())].slice(0, MAX_NAME_LENGTH).join('').trim()
 }
 
 // Our own writes come back as label events, so recent labels identify them.
@@ -34,8 +35,9 @@ export function decideLabel({ actual, own, hasAgent, icon = '', title = '' }) {
   else if (!own && title && bare === title) mode = 'auto'
   else mode = 'manual'
 
+  // Without our own record a prefixed label may be a name the person chose, so it is left alone.
   if (!hasAgent) {
-    if (!own && bare === actual) return { own: undefined }
+    if (!own) return { own: undefined }
     const target = mode === 'auto' && owned ? '' : isDefault(bare) ? '' : bare
     const needsWrite = target === '' ? !isDefault(actual) : target !== actual
     return { own: undefined, write: needsWrite ? target : undefined }

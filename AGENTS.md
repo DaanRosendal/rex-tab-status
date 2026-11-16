@@ -6,7 +6,8 @@ A plugin for Claude Code and Codex that prefixes the Rex tab label with a state 
 
 - `plugin/` is the only directory the hosts install. It holds the manifest, the SessionStart hook and the watcher in `src/`.
 - `status.mjs` reduces the status records of a pane, then of a window, to one state. `label.mjs` decides the label to write. Both are pure.
-- `tabs.mjs` reads Rex, applies those decisions and keeps the sleep timers. `watcher.mjs` is the entry point: `start` (the hook), `watch`, `stop` and `doctor`.
+- `tabs.mjs` reads Rex, applies those decisions and keeps the sleep timers. `themes.mjs` holds the icon presets, `rex-cli.mjs` runs `rex`, and `lock.mjs` is the per-server lock.
+- `watcher.mjs` is the entry point: `start` (the hook), `watch`, `stop` and `doctor`. Run `doctor` as `node plugin/src/watcher.mjs doctor` to list each pane's status and flag agents that report none.
 - `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` both point at `./plugin`.
 - `tests/helpers/fake-rex.mjs` is a single-window Rex used by the unit tests.
 
@@ -21,6 +22,8 @@ A plugin for Claude Code and Codex that prefixes the Rex tab label with a state 
 
 - The hook must print nothing and exit 0, because Claude adds its output to the conversation.
 - A running watcher keeps its old code after an update. `start` replaces it when the plugin version is higher, so bump the version for every change that users should receive. A dev checkout keeps the same version, so run `node plugin/src/watcher.mjs stop` after editing.
+- A lock file only names a holder when its pid is a process running `watcher.mjs watch`, because a recycled pid must neither block a claim nor be sent a signal. A stale lock is removed under a guard file so two claimers never remove each other's.
+- A tab with a status-like name and no record of ours is never touched, so a watcher killed without cleanup leaves its prefix behind.
 - Rex keeps `done` and `error` records after their program exits, so `reduceBlock` only counts a record whose owner is the foreground process or one of its ancestors.
 - Rex trims labels on both ends and resets an empty one to `Window <hex>`. Our own writes come back as label events, so `isEcho` compares them with recent writes.
 - Rex does not derive labels from the terminal title. The watcher takes the name from the title of the focused agent pane.
@@ -38,6 +41,6 @@ A plugin for Claude Code and Codex that prefixes the Rex tab label with a state 
 1. Set the version in `plugin/.claude-plugin/plugin.json`.
 2. Add a `## X.Y.Z` section at the top of `CHANGELOG.md`. The release workflow publishes it as the release notes.
 3. Run `npm test`, `npm run validate` and `npm run format:check`.
-4. Commit, then `git tag -a vX.Y.Z -m "<short summary>"` and push the branch and the tag.
+4. Merge to `master`, because both marketplaces and the README install commands track the default branch. Then `git tag -a vX.Y.Z -m "<short summary>"` and push the branch and the tag.
 
 Pushing the tag runs `.github/workflows/release.yml`. It checks the tag against the manifest, runs the tests and creates the GitHub release. Do not create the release by hand.

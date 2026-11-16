@@ -129,10 +129,12 @@ test('a renamed tab gets its own name back when the agent is gone', async () => 
 })
 
 test('a finished record whose process exited is not an agent', async () => {
-  const { rex, tabs } = setup({ label: '✅ notes', records: [record('done')] })
-  rex.blocks.get(BLOCK).proc = { foreground: undefined }
+  const { rex, tabs } = setup({ records: [record('done')] })
   await tabs.refresh(SESSION)
-  assert.equal(rex.tab.label, 'notes')
+  assert.match(rex.tab.label, /^✅ /)
+  rex.blocks.get(BLOCK).proc = { foreground: undefined }
+  await tabs.handle(blockEvent('child_exited', { exit_code: 0 }))
+  assert.equal(rex.tab.label, DEFAULT_LABEL)
 })
 
 test('programs that are not allowed agents leave the tab alone', async () => {
@@ -141,10 +143,11 @@ test('programs that are not allowed agents leave the tab alone', async () => {
   assert.equal(rex.renames().length, 0)
 })
 
-test('a leftover prefix is cleaned on startup', async () => {
-  const { rex, tabs } = setup({ label: '⏳ notes' })
+test('a tab named like a status is left alone when no agent runs in it', async () => {
+  const { rex, tabs } = setup({ label: '✅ release checklist' })
   await tabs.refresh(SESSION)
-  assert.equal(rex.tab.label, 'notes')
+  assert.equal(rex.tab.label, '✅ release checklist')
+  assert.equal(rex.renames().length, 0)
 })
 
 test('our own label write is not treated as a rename', async () => {
@@ -270,4 +273,74 @@ test('stopping gives a renamed tab its plain name back', async () => {
   await tabs.refresh(SESSION)
   await tabs.restore()
   assert.equal(rex.tab.label, 'My tab')
+})
+
+test('title and process events for panes without an agent do not touch Rex', async () => {
+  const { rex, tabs } = setup({ records: [] })
+  await tabs.refresh(SESSION)
+  const before = rex.calls.length
+  await tabs.handle(blockEvent('title_changed', { title: 'zsh' }))
+  await tabs.handle(blockEvent('process_changed'))
+  await tabs.handle(blockEvent('child_exited'))
+  assert.equal(rex.calls.length, before)
+})
+
+test('a status report from a pane not yet known to run an agent is still followed', async () => {
+  const { rex, tabs } = setup({ records: [] })
+  await tabs.refresh(SESSION)
+  setRecords(rex, record('working'))
+  await tabs.handle(blockEvent('program_status_changed'))
+  assert.match(rex.tab.label, /^⏳ /)
+  rex.blocks.get(BLOCK).title = 'Review MR'
+  await tabs.handle(blockEvent('title_changed', { title: 'Review MR' }))
+  assert.equal(rex.tab.label, '⏳ Review MR')
+})
+
+test('closing a pane forgets that it ran an agent', async () => {
+  const { rex, tabs } = setup({ records: [record('working')] })
+  await tabs.refresh(SESSION)
+  assert.equal(tabs.agentBlocks.size, 1)
+  rex.blocks.delete(BLOCK)
+  await tabs.handle(sessionEvent('block_closed', { block_id: BLOCK }))
+  assert.equal(tabs.agentBlocks.size, 0)
+})
+
+test('a rename made while the panes were being read is not overwritten', async () => {
+  const { rex, tabs } = setup({ records: [record('working')] })
+  const run = rex.run
+  let renamedMeanwhile = false
+  tabs.run = async args => {
+    const result = await run(args)
+    if (!renamedMeanwhile && args.at(-1) === 'program_status') {
+      renamedMeanwhile = true
+      rex.tab.label = 'Release notes'
+    }
+    return result
+  }
+  await tabs.refresh(SESSION)
+  assert.equal(rex.tab.label, '⏳ Release notes')
+})
+
+test('an unreadable process leaves the tab alone', async () => {
+  const { rex, tabs } = setup({ label: '✅ keep', records: [record('done')] })
+  const run = rex.run
+  tabs.run = async args => (args.at(-1) === 'process' ? undefined : run(args))
+  await tabs.refresh(SESSION)
+  assert.equal(rex.renames().length, 0)
+})
+
+test('a far-future finish time cannot make the sleep timer spin', async () => {
+  const later = new Date(Date.now() + 60 * 24 * 3600 * 1000).toISOString()
+  const { tabs, pending } = setup({ records: [record('done', { updated_at: later })] })
+  await tabs.refresh(SESSION)
+  const [timer] = pending()
+  assert.equal(timer.ms, 2 ** 31 - 1)
+})
+
+test('stopping lists each session once', async () => {
+  const { rex, tabs } = setup({ records: [record('working')] })
+  await tabs.refresh(SESSION)
+  const before = rex.calls.filter(c => c[0] === 'window' && c[1] === 'ls').length
+  await tabs.restore()
+  assert.equal(rex.calls.filter(c => c[0] === 'window' && c[1] === 'ls').length - before, 1)
 })
