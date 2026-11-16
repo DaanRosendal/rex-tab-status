@@ -46,6 +46,15 @@ else if (args.includes('call')) {
 const withoutRexVariables = env =>
   Object.fromEntries(Object.entries(env).filter(([name]) => !name.startsWith('REX_')))
 
+// The watcher creates its lock file before writing it, so a read can see it empty.
+async function readHeld(path) {
+  try {
+    return JSON.parse(await readFile(path, 'utf8'))
+  } catch {
+    return undefined
+  }
+}
+
 async function eventually(check) {
   const deadline = Date.now() + WAIT_MS
   for (;;) {
@@ -115,7 +124,7 @@ test('start prints nothing and runs one detached watcher that stop shuts down', 
       const files = await lockFiles()
       return files.length > 0 ? files : undefined
     })
-    const held = JSON.parse(await readFile(join(env.REX_TAB_STATUS_STATE, name), 'utf8'))
+    const held = await eventually(() => readHeld(join(env.REX_TAB_STATUS_STATE, name)))
     assert.equal(held.version, JSON.parse(await readFile(manifest, 'utf8')).version)
     assert.equal(typeof held.startedAt, 'string')
     await eventually(async () => (await calls()).some(c => c.includes('events --all --json')))
@@ -183,8 +192,8 @@ test('a newer plugin version replaces a running older watcher', async () => {
     await start(env, { REX_SESSION: 'session:s' })
     await old.exited
     const held = await eventually(async () => {
-      const file = JSON.parse(await readFile(join(state, `${key}.lock`), 'utf8'))
-      return file.pid !== old.child.pid ? file : undefined
+      const file = await readHeld(join(state, `${key}.lock`))
+      return file && file.pid !== old.child.pid ? file : undefined
     })
     assert.notEqual(held.version, '0.0.1')
     assert.equal((await lockFiles()).length, 1)
@@ -230,8 +239,8 @@ test('a recycled pid in the lock is neither trusted nor killed', async () => {
       )
       await start(env, { REX_SESSION: 'session:s' })
       const held = await eventually(async () => {
-        const file = JSON.parse(await readFile(join(state, `${key}.lock`), 'utf8'))
-        return file.pid !== bystander.pid ? file : undefined
+        const file = await readHeld(join(state, `${key}.lock`))
+        return file && file.pid !== bystander.pid ? file : undefined
       })
       assert.equal(typeof held.pid, 'number')
       assert.equal(bystander.exitCode, null)

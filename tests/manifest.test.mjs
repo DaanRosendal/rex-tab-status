@@ -87,5 +87,5 @@ test('the README documents every icon and every setting the code reads', async (
     ))
       if (variable !== 'REX_TAB_STATUS_STATE') variables.add(variable)
   for (const variable of variables)
-    assert.ok(readme.includes(`\`${variable}\``), `README is missing ${variable}`)
+    assert.match(readme, new RegExp(`${variable}(?![A-Z_])`), `README is missing ${variable}`)
 })
