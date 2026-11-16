@@ -1,105 +1,65 @@
 # rex-tab-status
 
-A Claude Code and Codex plugin that prefixes the Rex tab label with an emoji for the agent's state:
+Shows what your coding agent is doing in its [Rex](https://www.superlogical.com/rex) tab label.
 
-| Emoji | State                                                  |
-| ----- | ------------------------------------------------------ |
-| 💤    | idle for five minutes after startup or an interruption |
-| ⏳    | working, including while subagents run                 |
-| ❓    | needs you: a permission prompt or a question           |
-| ✅    | done                                                   |
-| ❌    | the turn ended on an error                             |
+| State                                        | `default` | `ascii` | `minimal` | `circles` |
+| -------------------------------------------- | --------- | ------- | --------- | --------- |
+| working, including while subagents run       | ⏳        | `[..]`  | ◐         | 🟡        |
+| needs you: a permission prompt or a question | ❓        | `[?]`   | ◆         | 🔴        |
+| done                                         | ✅        | `[ok]`  | ✓         | 🟢        |
+| failed, or needs new credentials             | ❌        | `[x]`   | ✗         | ⛔        |
+| finished or failed five minutes ago          | 💤        | `[zz]`  | ○         | ⚪        |
 
-The tab follows the agent's terminal title. A tab you renamed yourself keeps your name and only the emoji changes. When the agent exits, the prefix is removed and an auto-named tab goes back to Rex's default.
+A tab then reads like `⏳ Fix login redirect`. The name comes from the agent's terminal title, unless you renamed the tab. Then it keeps your name and only the emoji changes. Rex already marks unfocused tabs with a spinner, and this puts the state in the label itself.
 
-Idle starts a five-minute countdown. During that wait, the previous ✅ or ❌ stays visible. A newly started or interrupted idle tab has no emoji. Work or a question cancels the countdown.
+## Requirements
 
-It does nothing outside Rex or when `rex` is not on the `PATH`.
+- Rex, with `rex` on your `PATH`
+- Node.js 22 or newer
+- Claude Code or Codex with plugin support. Tested with Claude Code 2.1.325 and Codex 0.169.
 
 ## Install
 
-### Claude Code
-
-Needs a Claude Code version with function hooks. Tested on 2.1.319.
-
-At the prompt of a terminal session:
-
-```
-/plugin marketplace add https://github.com/DaanRosendal/rex-tab-status.git
-/plugin install rex-tab-status@rex-tab-status
-```
-
-From a shell:
-
 ```bash
+# Claude Code
 claude plugin marketplace add https://github.com/DaanRosendal/rex-tab-status.git
 claude plugin install rex-tab-status@rex-tab-status
-```
 
-### Codex
-
-Needs Node.js 22.18 or newer and a Codex version that reports program status to Rex. Tested on Codex 0.166.0.
-
-```bash
+# Codex
 codex plugin marketplace add https://github.com/DaanRosendal/rex-tab-status.git
 codex plugin add rex-tab-status@rex-tab-status
 ```
 
-Start a new Codex session and review the plugin's hook in `/hooks`. The hook starts one background watcher per Rex server. It follows Rex's terminal events (Codex's status reports, titles, and processes). It does not connect to a model or read conversation transcripts.
+Start a new session. In Codex, trust the hook in `/hooks`.
 
-The watcher keeps running after the Codex session ends, until Rex exits. To stop it, run `pkill -f 'watcher.mjs watch'`. It restores the tab labels on the way out.
+A background watcher reads Rex's status and tab titles, never your conversations.
 
-Codex can leave its native status at working while an async question waits. The watcher also recognizes Codex's `Action Required` title marker so those questions show ❓ until answered.
+## Settings
 
-Both hosts use the same repository and plugin name. Each host installs only its own folder: `claude/` for Claude, `codex/` for Codex. Claude loads `claude/hooks/hooks.json` and its function hooks. Codex's manifest selects `hooks/codex.json` and its background command hook, and Codex fingerprints its bundle at startup. The code both share lives in `shared/` and is copied into each folder's `hooks/vendor/` by `npm run sync`.
-
-## Themes
-
-Set `REX_TAB_STATUS_THEME` to change the icons. An unknown or empty value uses `default`.
-
-| State     | `default` | `ascii` | `minimal` | `circles` |
-| --------- | --------- | ------- | --------- | --------- |
-| idle      | 💤        | `[zz]`  | ○         | ⚪        |
-| working   | ⏳        | `[..]`  | ◐         | 🟡        |
-| needs you | ❓        | `[?]`   | ◆         | 🔴        |
-| done      | ✅        | `[ok]`  | ✓         | 🟢        |
-| error     | ❌        | `[x]`   | ✗         | ⛔        |
-
-`ascii` suits terminals and fonts without emoji. `circles` tells the states apart by color alone.
-
-For Claude Code, set the variable in `~/.claude/settings.json`:
-
-```json
-{ "env": { "REX_TAB_STATUS_THEME": "ascii" } }
-```
-
-Codex reads it when its watcher starts, so stop the watcher after changing it (see Codex above). Tabs painted under another theme are cleaned up either way.
-
-A tab name that starts with one of these icons and a space, such as `[ok] notes`, loses that prefix when the plugin repaints the tab.
-
-## Develop
+Put these in your shell profile, then stop the watcher once so it picks them up.
 
 ```bash
-npm test
-npm run test:plugin
-npm run test:integration
-npm run validate
-npm run sync
+export REX_TAB_STATUS_THEME=ascii              # tabs read [..] Fix login redirect
+export REX_TAB_STATUS_APPS=claude-code,aider   # which agents to follow
+export REX_TAB_STATUS=off                      # turn it off
 ```
 
-Edit shared code in `shared/`, then run `npm run sync`. CI fails when a vendored copy differs from `shared/`. `npm run bump -- X.Y.Z` sets the version in `package.json` and every plugin manifest.
+The theme is one of the table columns. By default it follows `claude-code` and `codex`.
 
-The integration test creates and removes its own Rex server and terminals.
-
-To install the checkout in Codex:
+## Stop or uninstall
 
 ```bash
-codex plugin marketplace add "$PWD"
-codex plugin add rex-tab-status@rex-tab-status
+pkill -f 'rex-tab-status.*watcher.mjs watch'
 ```
 
-## Limits
+This restores your tab labels, and the next session starts the watcher again. Run it once after upgrading from 0.x. To uninstall, remove the plugin with `claude plugin uninstall rex-tab-status` or `codex plugin remove rex-tab-status@rex-tab-status`, then run the command above.
 
-Two Claude sessions in split panes of one Rex tab overwrite each other's emoji. In auto mode, a tool call the classifier takes longer than two seconds to decide can show ❓ for a moment.
+## Troubleshooting
 
-Multiple Codex panes in one tab share an emoji. Waiting for you takes priority over working, then error, done, and idle. The title follows the first Codex pane. In a tab shared by Claude and Codex, Claude owns the label and the Codex watcher leaves it alone.
+If a tab never changes, check that your agent reports a status. An empty list means it is too old or does not report to Rex.
+
+```bash
+rex block call -b "$REX_BLOCK" program_status
+```
+
+See [AGENTS.md](AGENTS.md) to contribute and [CHANGELOG.md](CHANGELOG.md) for releases. Licensed under the [MIT License](LICENSE).

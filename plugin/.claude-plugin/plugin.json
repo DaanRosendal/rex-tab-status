@@ -1,0 +1,10 @@
+{
+  "name": "rex-tab-status",
+  "version": "1.0.0",
+  "description": "Prefix the Rex tab label with an emoji for the coding agent's state",
+  "author": { "name": "Daan Rosendal" },
+  "license": "MIT",
+  "homepage": "https://github.com/DaanRosendal/rex-tab-status",
+  "repository": "https://github.com/DaanRosendal/rex-tab-status",
+  "keywords": ["rex", "terminal", "tab", "status", "claude-code", "codex"]
+}

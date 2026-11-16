@@ -11,8 +11,8 @@ import { promisify } from 'node:util'
 const exec = promisify(execFile)
 const skip =
   spawnSync('rex', ['--help'], { stdio: 'ignore' }).status === 0 ? false : 'rex is not installed'
-const plugin = fileURLToPath(new URL('../codex/hooks/watcher.mjs', import.meta.url))
-const fixture = fileURLToPath(new URL('./fixtures/codex-terminal.mjs', import.meta.url))
+const plugin = fileURLToPath(new URL('../plugin/src/watcher.mjs', import.meta.url))
+const fixture = fileURLToPath(new URL('./fixtures/agent-terminal.mjs', import.meta.url))
 
 const TEST_TIMEOUT_MS = 45000
 const EVENTUALLY_TIMEOUT_MS = 8000
@@ -34,14 +34,14 @@ async function eventually(check) {
 }
 
 test(
-  'the installed watcher follows real Rex events and restores labels on shutdown',
+  'the watcher follows real Rex status reports and restores labels on shutdown',
   { timeout: TEST_TIMEOUT_MS, skip },
   async () => {
     // Unix socket paths are limited to about 100 characters, which os.tmpdir() exceeds on macOS.
     const dir = await mkdtemp('/tmp/rex-tab-status-test-')
     const endpoint = `unix://${dir}/server.sock`
-    const data = join(dir, 'codex-data')
-    const env = { ...process.env, REX_SERVER: endpoint, PLUGIN_DATA: data }
+    const data = join(dir, 'watcher-state')
+    const env = { ...process.env, REX_SERVER: endpoint, REX_TAB_STATUS_STATE: data }
     delete env.REX_SESSION
     delete env.REX_BLOCK
     const run = async args =>
@@ -98,40 +98,38 @@ test(
         errors += chunk
       })
       exited = once(watcher, 'exit')
-      await eventually(async () => assert.equal(await label(), 'Codex integration test'))
+      await eventually(async () => assert.equal(await label(), 'Agent integration test'))
 
       const startEnv = { ...env, REX_SESSION: 'session:obsolete' }
       await Promise.all([
         exec(process.execPath, [plugin, 'start'], { env: startEnv }),
         exec(process.execPath, [plugin, 'start'], { env: startEnv }),
       ])
-      const locks = (await readdir(data)).filter(name => name.endsWith('.pid'))
+      const locks = (await readdir(data)).filter(name => name.endsWith('.lock'))
       assert.equal(locks.length, 1)
-      assert.equal(await readFile(join(data, locks[0]), 'utf8'), String(watcher.pid))
+      assert.equal(JSON.parse(await readFile(join(data, locks[0]), 'utf8')).pid, watcher.pid)
 
-      for (const [state, emoji] of [
-        ['working', '⏳'],
-        ['blocked', '❓'],
-        ['working', '⏳'],
-        ['done', '✅'],
-        ['error', '❌'],
+      for (const [input, emoji] of [
+        [{ state: 'working' }, '⏳'],
+        [{ state: 'blocked', kind: 'permission' }, '❓'],
+        [{ state: 'working' }, '⏳'],
+        [{ state: 'blocked', kind: 'question' }, '❓'],
+        [{ state: 'done' }, '✅'],
+        [{ state: 'error' }, '❌'],
+        [{ state: 'blocked', kind: 'auth' }, '❌'],
       ]) {
-        await send({ state })
-        await eventually(async () => assert.equal(await label(), `${emoji} Codex integration test`))
+        await send(input)
+        await eventually(async () => assert.equal(await label(), `${emoji} Agent integration test`))
       }
       await send({ state: 'idle' })
+      await eventually(async () => assert.equal(await label(), 'Agent integration test'))
       await send({ titleOnly: true, title: '⠹ After idle' })
-      await eventually(async () => assert.equal(await label(), '❌ After idle'))
+      await eventually(async () => assert.equal(await label(), 'After idle'))
       await send({ state: 'working', title: '⠹ New topic' })
       await eventually(async () => assert.equal(await label(), '⏳ New topic'))
-      await send({ titleOnly: true, title: '[ ! ] Action Required | New topic' })
-      await eventually(async () => assert.equal(await label(), '❓ New topic'))
-      const native = JSON.parse(
-        await run(['block', 'call', '-s', session, '-b', block, 'program_status']),
-      )
-      assert.equal(native.records[0].state, 'working')
       await send({ titleOnly: true, title: '⠸ New topic' })
-      await eventually(async () => assert.equal(await label(), '⏳ New topic'))
+      await setTimeout(300)
+      assert.equal(await label(), '⏳ New topic')
 
       const custom = 'deploy $(keep-this-literal)'
       await run(['window', 'rename', '-s', session, '--', window, custom])
@@ -144,6 +142,10 @@ test(
       watcher = undefined
       assert.equal(code, 0, errors)
       assert.equal(await label(), custom)
+      assert.deepEqual(
+        (await readdir(data)).filter(name => name.endsWith('.lock')),
+        [],
+      )
       assert.equal(errors, '')
     } finally {
       if (watcher) {
