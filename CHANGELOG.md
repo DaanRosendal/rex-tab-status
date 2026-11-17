@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.0] - 2026-11-18
+
+### Changed
+
+- Show 💤 fifteen minutes after an agent finished or failed, up from five ([`4dc2876`](https://github.com/DaanRosendal/rex-tab-status/commit/4dc2876))
+
+### Added
+
+- Add `REX_TAB_STATUS_SLEEP_MINUTES` to choose how long a finished or failed tab waits before showing 💤, with `0` to keep the result forever ([`4dc2876`](https://github.com/DaanRosendal/rex-tab-status/commit/4dc2876))
+
 ## [1.1.0] - 2026-11-18
 
 ### Changed
@@ -99,6 +109,7 @@
 - Show Claude Code's state on the Rex tab label as an emoji: idle, working, needs you, done or error ([`2653a95`](https://github.com/DaanRosendal/rex-tab-status/commit/2653a95))
 - Leave the tab alone in non-interactive sessions, and show refusals as errors ([`c4eee98`](https://github.com/DaanRosendal/rex-tab-status/commit/c4eee98))
 
+[1.2.0]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v1.2.0
 [1.1.0]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v1.1.0
 [1.0.0]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v1.0.0
 [0.5.1]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v0.5.1
