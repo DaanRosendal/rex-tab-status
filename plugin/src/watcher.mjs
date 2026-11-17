@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { claimLock, compareVersions, isAlive, readLock } from './lock.mjs'
 import { blocksOf, parse, parseWindows, rexArgs, runner } from './rex-cli.mjs'
-import { DEFAULT_APPS } from './status.mjs'
+import { DEFAULT_APPS, sleepMsFrom } from './status.mjs'
 import { Tabs } from './tabs.mjs'
 import { resolveTheme } from './themes.mjs'
 
@@ -79,6 +79,7 @@ async function watch(endpoint, instance) {
     run,
     icons: resolveTheme(process.env.REX_TAB_STATUS_THEME),
     apps: apps(),
+    sleepMs: sleepMsFrom(process.env.REX_TAB_STATUS_SLEEP_MINUTES),
   })
   let events
   let stopping = false

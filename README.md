@@ -8,7 +8,7 @@ Shows what your coding agent is doing in its [Rex](https://www.superlogical.com/
 | needs you: a permission prompt or a question | ❓        | `[?]`   | ◆         | 🔴        |
 | done                                         | ✅        | `[ok]`  | ✓         | 🟢        |
 | failed, or needs new credentials             | ❌        | `[x]`   | ✗         | ⛔        |
-| finished or failed five minutes ago          | 💤        | `[zz]`  | ○         | ⚪        |
+| finished or failed a while ago               | 💤        | `[zz]`  | ○         | ⚪        |
 
 A tab then reads like `⏳ Fix login redirect`. The name comes from the agent's terminal title, unless you renamed the tab. Then it keeps your name and only the emoji changes. Rex already marks unfocused tabs with a spinner, and this puts the state in the label itself.
 
@@ -54,10 +54,11 @@ Put these in your shell profile, then stop the watcher once so it picks them up.
 ```bash
 export REX_TAB_STATUS_THEME=ascii              # tabs read [..] Fix login redirect
 export REX_TAB_STATUS_APPS=claude-code,codex,pi   # which agents to follow (* adds every program that reports, not just agents)
+export REX_TAB_STATUS_SLEEP_MINUTES=30         # minutes until a finished tab shows 💤, 0 never
 export REX_TAB_STATUS=off                      # turn it off
 ```
 
-The theme is one of the table columns. Agents are matched by the `app` name they report to Rex. By default it follows `claude-code`, `codex`, `pi` and `opencode`.
+The theme is one of the table columns. By default a tab falls asleep fifteen minutes after its agent finished or failed, and `0` keeps the result forever. Agents are matched by the `app` name they report to Rex. By default it follows `claude-code`, `codex`, `pi` and `opencode`.
 
 ## Stop or uninstall
 

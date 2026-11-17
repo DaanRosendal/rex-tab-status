@@ -12,10 +12,11 @@ import {
   record,
 } from './helpers/fake-rex.mjs'
 
-function setup(options) {
+function setup(options, tabsOptions = {}) {
   const rex = createFakeRex(options)
   const clock = { now: Date.now(), timers: [] }
   const tabs = new Tabs({
+    ...tabsOptions,
     run: rex.run,
     now: () => clock.now,
     setTimer: (fn, ms) => {
@@ -170,7 +171,7 @@ test('a rename by the person is picked up and kept', async () => {
   assert.equal(rex.tab.label, '⏳ Release notes')
 })
 
-test('a finished agent falls asleep five minutes after it came to rest', async () => {
+test('a finished agent falls asleep after the default delay', async () => {
   const { rex, tabs, clock, pending } = setup({ records: [record('done')] })
   await tabs.refresh(SESSION)
   assert.match(rex.tab.label, /^✅ /)
@@ -180,6 +181,29 @@ test('a finished agent falls asleep five minutes after it came to rest', async (
   timer.fn()
   await tabs.painting
   assert.match(rex.tab.label, /^💤 /)
+  assert.equal(pending().length, 0)
+})
+
+test('the sleep delay can be changed', async () => {
+  const sleepMs = 60 * 1000
+  const { rex, tabs, clock, pending } = setup({ records: [record('done')] }, { sleepMs })
+  await tabs.refresh(SESSION)
+  const [timer] = pending()
+  assert.ok(timer.ms > sleepMs - 5000 && timer.ms <= sleepMs)
+  clock.now += sleepMs
+  timer.fn()
+  await tabs.painting
+  assert.match(rex.tab.label, /^💤 /)
+})
+
+test('a tab that never falls asleep keeps its result and sets no timer', async () => {
+  const old = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { rex, tabs, pending } = setup(
+    { records: [record('done', { updated_at: old })] },
+    { sleepMs: Infinity },
+  )
+  await tabs.refresh(SESSION)
+  assert.match(rex.tab.label, /^✅ /)
   assert.equal(pending().length, 0)
 })
 

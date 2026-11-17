@@ -83,7 +83,7 @@ test('the README documents every icon and every setting the code reads', async (
   const variables = new Set()
   for (const name of await readdir(join(root, 'plugin/src')))
     for (const [variable] of (await readFile(join(root, 'plugin/src', name), 'utf8')).matchAll(
-      /REX_TAB_STATUS(_[A-Z]+)?/g,
+      /REX_TAB_STATUS(_[A-Z]+)*/g,
     ))
       if (variable !== 'REX_TAB_STATUS_STATE') variables.add(variable)
   for (const variable of variables)

@@ -2,6 +2,7 @@ import { cleanTitle, decideLabel, isEcho } from './label.mjs'
 import { blocksOf, parse, parseWindows } from './rex-cli.mjs'
 import {
   DEFAULT_APPS,
+  SLEEP_MS,
   isLive,
   liveOwners,
   pickTitleSource,
@@ -28,6 +29,7 @@ export class Tabs {
     run,
     icons = resolveTheme(undefined),
     apps = DEFAULT_APPS,
+    sleepMs = SLEEP_MS,
     now = Date.now,
     setTimer = setTimeout,
     clearTimer = clearTimeout,
@@ -35,6 +37,7 @@ export class Tabs {
     this.run = run
     this.icons = icons
     this.apps = apps
+    this.sleepMs = sleepMs
     this.now = now
     this.setTimer = setTimer
     this.clearTimer = clearTimer
@@ -95,7 +98,7 @@ export class Tabs {
     if (!fresh) return
 
     const now = this.now()
-    const view = reduceWindow(reports, now)
+    const view = reduceWindow(reports, now, this.sleepMs)
     const source = pickTitleSource(reports, fresh.focused_block_id)
     const result = decideLabel({
       actual: fresh.label,

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { SLEEP_MS, pickTitleSource, reduceBlock, reduceWindow } from '../plugin/src/status.mjs'
+import {
+  SLEEP_MS,
+  pickTitleSource,
+  reduceBlock,
+  reduceWindow,
+  sleepMsFrom,
+} from '../plugin/src/status.mjs'
 import { THEMES } from '../plugin/src/themes.mjs'
 
 const owner = { pid: 10, name: 'claude' }
@@ -106,7 +112,7 @@ test('auth and error both show the error icon', () => {
   assert.equal(reduceWindow([block('error', { restAt: 0 })], 1).iconKey, 'error')
 })
 
-test('a finished window starts sleeping five minutes after it came to rest', () => {
+test('a finished window starts sleeping after the default delay', () => {
   const rest = 1_000_000
   const view = reduceWindow([block('done', { restAt: rest })], rest + SLEEP_MS - 1)
   assert.deepEqual([view.iconKey, view.sleeping, view.wakeAt], ['done', false, rest + SLEEP_MS])
@@ -148,4 +154,20 @@ test('every icon key a window can show exists in every theme', () => {
   }
   assert.deepEqual([...shown].sort(), ['blocked', 'done', 'error', 'sleeping', 'working'])
   for (const icons of Object.values(THEMES)) for (const key of shown) assert.ok(icons[key], key)
+})
+
+test('the sleep delay is read in minutes, zero means never and bad input means the default', () => {
+  assert.equal(sleepMsFrom('15'), 15 * 60 * 1000)
+  assert.equal(sleepMsFrom(' 0.5 '), 30 * 1000)
+  assert.equal(sleepMsFrom('0'), Infinity)
+  for (const bad of [undefined, '', '  ', 'soon', '-3', 'NaN', 'Infinity'])
+    assert.equal(sleepMsFrom(bad), SLEEP_MS, String(bad))
+})
+
+test('a window falls asleep after the delay it is given, or never', () => {
+  const blocks = [block('done', { restAt: 0 })]
+  assert.equal(reduceWindow(blocks, 999, 1000).sleeping, false)
+  assert.equal(reduceWindow(blocks, 1000, 1000).iconKey, 'sleeping')
+  const forever = reduceWindow(blocks, 10 ** 15, Infinity)
+  assert.deepEqual([forever.sleeping, forever.wakeAt, forever.iconKey], [false, undefined, 'done'])
 })

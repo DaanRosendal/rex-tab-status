@@ -1,5 +1,13 @@
-export const SLEEP_MS = 5 * 60 * 1000
+export const SLEEP_MS = 15 * 60 * 1000
 export const DEFAULT_APPS = ['claude-code', 'codex', 'pi', 'opencode']
+
+// Minutes as text. Zero means never fall asleep, and anything unusable means the default.
+export function sleepMsFrom(text) {
+  if (text === undefined || String(text).trim() === '') return SLEEP_MS
+  const minutes = Number(text)
+  if (!Number.isFinite(minutes) || minutes < 0) return SLEEP_MS
+  return minutes === 0 ? Infinity : minutes * 60 * 1000
+}
 
 const RANK = { none: 0, idle: 1, done: 2, error: 3, working: 4, auth: 5, blocked: 6 }
 const ICON_KEY = {
@@ -72,7 +80,7 @@ export function reduceWindow(blocks, now, sleepMs = SLEEP_MS) {
     const rests = blocks
       .filter(block => block.state === 'done' || block.state === 'error')
       .map(block => block.restAt)
-    if (rests.every(Number.isFinite)) {
+    if (rests.every(Number.isFinite) && Number.isFinite(sleepMs)) {
       wakeAt = Math.max(...rests) + sleepMs
       sleeping = now >= wakeAt
     }
