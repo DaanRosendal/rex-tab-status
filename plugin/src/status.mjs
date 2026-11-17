@@ -10,7 +10,7 @@ const ICON_KEY = {
   done: 'done',
 }
 
-export function shownOf(record) {
+function shownOf(record) {
   switch (record?.state) {
     case 'working':
     case 'error':
