@@ -106,3 +106,12 @@ test('the Pi extension starts the watcher when a session starts', async () => {
   assert.equal(args[0], join(root, 'plugin/src/watcher.mjs'))
   assert.equal(args[1], 'start')
 })
+
+test('the OpenCode TUI plugin starts the watcher', async () => {
+  const { exports } = await read('package.json')
+  assert.equal(exports['./tui'], './opencode/tui.mjs')
+  const source = await readFile(join(root, 'opencode/tui.mjs'), 'utf8')
+  assert.match(source, /Plugin\.define\(\{\s*id: 'rex-tab-status'/)
+  assert.match(source, /plugin\/src\/watcher\.mjs/)
+  assert.match(source, /spawn\('node', \[watcher, 'start'\]/)
+})

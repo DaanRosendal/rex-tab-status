@@ -8,6 +8,9 @@
   },
   "private": true,
   "type": "module",
+  "exports": {
+    "./tui": "./opencode/tui.mjs"
+  },
   "pi": {
     "extensions": [
       "./pi/extension.mjs"
