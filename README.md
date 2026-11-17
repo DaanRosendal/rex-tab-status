@@ -16,7 +16,7 @@ A tab then reads like `⏳ Fix login redirect`. The name comes from the agent's 
 
 - Rex, with `rex` on your `PATH`
 - Node.js 22 or newer
-- Claude Code or Codex with plugin support. Tested with Claude Code 2.1.325 and Codex 0.169.
+- A coding agent that reports its status to Rex with the [program status](https://www.superlogical.com/rex/docs/build/program-status) protocol (OSC 7501). Claude Code, Codex, Pi (`pi`), OpenCode (`opencode`), Goose (`goose`) and Amp do.
 
 ## Install
 
@@ -28,9 +28,19 @@ claude plugin install rex-tab-status@rex-tab-status
 # Codex
 codex plugin marketplace add https://github.com/DaanRosendal/rex-tab-status.git
 codex plugin add rex-tab-status@rex-tab-status
+
+# Pi
+pi install git:github.com/DaanRosendal/rex-tab-status
 ```
 
 Start a new session. In Codex, trust the hook in `/hooks`.
+
+For any other agent, clone the repo and start the watcher from your shell profile or the agent's session start hook. Then add the agent to `REX_TAB_STATUS_APPS` (see Settings).
+
+```bash
+git clone https://github.com/DaanRosendal/rex-tab-status.git
+node rex-tab-status/plugin/src/watcher.mjs start
+```
 
 A background watcher reads Rex's status and tab titles, never your conversations.
 
@@ -40,11 +50,11 @@ Put these in your shell profile, then stop the watcher once so it picks them up.
 
 ```bash
 export REX_TAB_STATUS_THEME=ascii              # tabs read [..] Fix login redirect
-export REX_TAB_STATUS_APPS=claude-code,aider   # which agents to follow
+export REX_TAB_STATUS_APPS=claude-code,codex,pi   # which agents to follow (* adds every program that reports, not just agents)
 export REX_TAB_STATUS=off                      # turn it off
 ```
 
-The theme is one of the table columns. By default it follows `claude-code` and `codex`.
+The theme is one of the table columns. Agents are matched by the `app` name they report to Rex. By default it follows `claude-code`, `codex`, `pi` and `opencode`.
 
 ## Stop or uninstall
 
@@ -52,7 +62,7 @@ The theme is one of the table columns. By default it follows `claude-code` and `
 pkill -f 'rex-tab-status.*watcher.mjs watch'
 ```
 
-This restores your tab labels, and the next session starts the watcher again. Run it once after upgrading from 0.x. To uninstall, remove the plugin with `claude plugin uninstall rex-tab-status` or `codex plugin remove rex-tab-status@rex-tab-status`, then run the command above.
+This restores your tab labels, and the next session starts the watcher again. Run it once after upgrading from 0.x. To uninstall, remove the plugin with `claude plugin uninstall rex-tab-status`, `codex plugin remove rex-tab-status@rex-tab-status` or `pi remove git:github.com/DaanRosendal/rex-tab-status`, then run the command above.
 
 ## Troubleshooting
 
