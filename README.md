@@ -16,7 +16,7 @@ A tab then reads like `⏳ Fix login redirect`. The name comes from the agent's 
 
 - Rex, with `rex` on your `PATH`
 - Node.js 22 or newer
-- A coding agent that reports its status to Rex with the [program status](https://www.superlogical.com/rex/docs/build/program-status) protocol (OSC 7501). Claude Code, Codex, Pi (`pi`), OpenCode (`opencode`), Goose (`goose`) and Amp do.
+- A coding agent that reports its status to Rex with the [program status](https://www.superlogical.com/rex/docs/build/program-status) protocol (OSC 7501). Claude Code, Codex, Pi (`pi`), OpenCode 2.x (`opencode`), Goose (`goose`) and Amp do.
 
 ## Install
 
@@ -31,9 +31,12 @@ codex plugin add rex-tab-status@rex-tab-status
 
 # Pi
 pi install git:github.com/DaanRosendal/rex-tab-status
+
+# OpenCode 2.x
+opencode plugin add github:DaanRosendal/rex-tab-status
 ```
 
-Start a new session. In Codex, trust the hook in `/hooks`.
+Start a new session. In Codex, trust the hook in `/hooks`. OpenCode reports only working and idle, so its tab shows ⏳ and never ✅.
 
 For any other agent, clone the repo and start the watcher from your shell profile or the agent's session start hook. Then add the agent to `REX_TAB_STATUS_APPS` (see Settings).
 
@@ -62,7 +65,7 @@ The theme is one of the table columns. Agents are matched by the `app` name they
 pkill -f 'rex-tab-status.*watcher.mjs watch'
 ```
 
-This restores your tab labels, and the next session starts the watcher again. Run it once after upgrading from 0.x. To uninstall, remove the plugin with `claude plugin uninstall rex-tab-status`, `codex plugin remove rex-tab-status@rex-tab-status` or `pi remove git:github.com/DaanRosendal/rex-tab-status`, then run the command above.
+This restores your tab labels, and the next session starts the watcher again. Run it once after upgrading from 0.x. To uninstall, remove the plugin with `claude plugin uninstall rex-tab-status`, `codex plugin remove rex-tab-status@rex-tab-status`, `pi remove git:github.com/DaanRosendal/rex-tab-status` or `opencode plugin remove rex-tab-status`, then run the command above.
 
 ## Troubleshooting
 
