@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { SLEEP_MS, pickTitleSource, reduceBlock, reduceWindow } from '../plugin/src/status.mjs'
+import { THEMES } from '../plugin/src/themes.mjs'
 
 const owner = { pid: 10, name: 'claude' }
 const proc = { foreground: { pid: 10 }, ancestors: [{ pid: 5 }] }
@@ -134,4 +135,17 @@ test('the title comes from the focused agent pane, then the first one', () => {
   assert.equal(pickTitleSource(blocks, 'b').id, 'b')
   assert.equal(pickTitleSource(blocks, 'c').id, 'a')
   assert.equal(pickTitleSource([block('none', { hasAgent: false })], 'b'), undefined)
+})
+
+test('every icon key a window can show exists in every theme', () => {
+  const shown = new Set()
+  for (const state of ['none', 'idle', 'working', 'blocked', 'auth', 'error', 'done']) {
+    const resting = state === 'done' || state === 'error' ? { restAt: 0 } : {}
+    for (const now of [1, SLEEP_MS + 1]) {
+      const { iconKey } = reduceWindow([block(state, resting)], now)
+      if (iconKey) shown.add(iconKey)
+    }
+  }
+  assert.deepEqual([...shown].sort(), ['blocked', 'done', 'error', 'sleeping', 'working'])
+  for (const icons of Object.values(THEMES)) for (const key of shown) assert.ok(icons[key], key)
 })
