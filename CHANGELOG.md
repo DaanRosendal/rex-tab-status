@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0] - 2026-11-18
+
+### Changed
+
+- Follow `pi` and `opencode` by default, next to `claude-code` and `codex` ([`56e5902`](https://github.com/DaanRosendal/rex-tab-status/commit/56e5902))
+- Say in the README that any agent that reports status to Rex works, with install commands for each ([`d7d8061`](https://github.com/DaanRosendal/rex-tab-status/commit/d7d8061)) ([`f4f984a`](https://github.com/DaanRosendal/rex-tab-status/commit/f4f984a))
+
+### Added
+
+- Add Pi support. `pi install` adds an extension that starts the watcher with each session ([`56e5902`](https://github.com/DaanRosendal/rex-tab-status/commit/56e5902))
+- Add OpenCode 2.x support. `opencode plugin add` installs a TUI plugin that starts the watcher ([`990b87c`](https://github.com/DaanRosendal/rex-tab-status/commit/990b87c))
+
 ## [1.0.0] - 2026-11-16
 
 ### Changed
@@ -87,6 +99,7 @@
 - Show Claude Code's state on the Rex tab label as an emoji: idle, working, needs you, done or error ([`2653a95`](https://github.com/DaanRosendal/rex-tab-status/commit/2653a95))
 - Leave the tab alone in non-interactive sessions, and show refusals as errors ([`c4eee98`](https://github.com/DaanRosendal/rex-tab-status/commit/c4eee98))
 
+[1.1.0]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v1.1.0
 [1.0.0]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v1.0.0
 [0.5.1]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v0.5.1
 [0.5.0]: https://github.com/DaanRosendal/rex-tab-status/releases/tag/v0.5.0
