@@ -6,10 +6,12 @@ A plugin for Claude Code and Codex that prefixes the Rex tab label with a state 
 
 - `plugin/` is the only directory the hosts install. It holds the manifest, the SessionStart hook and the watcher in `src/`.
 - `status.mjs` reduces the status records of a pane, then of a window, to one state. `label.mjs` decides the label to write. Both are pure.
-- `tabs.mjs` reads Rex, applies those decisions and keeps the sleep timers. `themes.mjs` holds the icon presets, `rex-cli.mjs` runs `rex`, and `lock.mjs` is the per-server lock.
+- `tabs.mjs` reads Rex, applies those decisions and keeps the sleep timers. `themes.mjs` holds the icon presets, `rex-cli.mjs` runs `rex` and parses its JSON, and `lock.mjs` is the per-server lock with its version rule.
 - `watcher.mjs` is the entry point: `start` (the hook), `watch`, `stop` and `doctor`. Run `doctor` as `node plugin/src/watcher.mjs doctor` to list each pane's status and flag agents that report none.
 - `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` both point at `./plugin`.
-- `tests/helpers/fake-rex.mjs` is a single-window Rex used by the unit tests.
+- `tests/*.test.mjs` are the unit tests, one per module, and `npm test` runs every one of them. `tests/helpers/fake-rex.mjs` is a single-window Rex they share.
+- `tests/integration/rex.test.mjs` runs the watcher against a real Rex server, with `tests/fixtures/agent-terminal.mjs` standing in for an agent.
+- `CHANGELOG.md` feeds the release notes, and `SECURITY.md` is the vulnerability policy.
 
 ## Commands
 
