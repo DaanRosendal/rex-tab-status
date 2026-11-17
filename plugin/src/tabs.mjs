@@ -1,5 +1,5 @@
 import { cleanTitle, decideLabel, isEcho } from './label.mjs'
-import { parse } from './rex-cli.mjs'
+import { blocksOf, parse, parseWindows } from './rex-cli.mjs'
 import {
   DEFAULT_APPS,
   isLive,
@@ -15,17 +15,6 @@ const MAX_TIMER_MS = 2 ** 31 - 1
 // Any report can start an agent. The others only matter for panes already known to run one.
 const ALWAYS_REFRESH = ['program_status_changed', 'program_status_removed']
 const KNOWN_PANE_EVENTS = ['process_changed', 'child_exited']
-
-export function parseWindows(text) {
-  const windows = parse(text)?.windows
-  return Array.isArray(windows)
-    ? windows.filter(w => typeof w?.window_id === 'string' && typeof w?.label === 'string')
-    : undefined
-}
-
-export function blocksOf(win) {
-  return (win.layers ?? []).flatMap(layer => layer?.blocks ?? [])
-}
 
 export class Tabs {
   owned = new Map()

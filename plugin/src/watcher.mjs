@@ -8,9 +8,9 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { claimLock, compareVersions, isAlive, readLock } from './lock.mjs'
-import { parse, rexArgs, runner } from './rex-cli.mjs'
+import { blocksOf, parse, parseWindows, rexArgs, runner } from './rex-cli.mjs'
 import { DEFAULT_APPS } from './status.mjs'
-import { Tabs, blocksOf, parseWindows } from './tabs.mjs'
+import { Tabs } from './tabs.mjs'
 import { resolveTheme } from './themes.mjs'
 
 const exec = promisify(execFile)

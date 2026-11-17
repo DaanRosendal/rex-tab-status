@@ -37,3 +37,14 @@ export function parse(text) {
     return undefined
   }
 }
+
+export function parseWindows(text) {
+  const windows = parse(text)?.windows
+  return Array.isArray(windows)
+    ? windows.filter(w => typeof w?.window_id === 'string' && typeof w?.label === 'string')
+    : undefined
+}
+
+export function blocksOf(win) {
+  return (win.layers ?? []).flatMap(layer => layer?.blocks ?? [])
+}
