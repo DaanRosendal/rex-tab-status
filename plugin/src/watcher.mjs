@@ -193,7 +193,7 @@ async function doctor() {
         const states = records.map(r => `${r.state}${r.kind ? `/${r.kind}` : ''}`).join(', ')
         const silent = records.length === 0 && KNOWN_AGENTS.includes(exe)
         console.log(
-          `${session.label} | ${win.label} | ${block.block_id} | ${exe || '-'} | ${states || 'no status'}${silent ? ' <- runs an agent but sends no status; update it' : ''}`,
+          `${session.label} | ${win.label} | ${block.block_id} | ${exe || '-'} | ${states || 'no status'}${silent ? ' <- runs an agent but sends no status, so update it' : ''}`,
         )
       }
     }

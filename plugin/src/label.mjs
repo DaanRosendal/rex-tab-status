@@ -13,11 +13,9 @@ export function cleanTitle(text) {
     .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
     .trim()
     .replace(SPINNER, '')
-  // Cutting by code point keeps an emoji at the limit whole, which Rex would otherwise echo differently.
   return [...stripIcons(plain.trim())].slice(0, MAX_NAME_LENGTH).join('').trim()
 }
 
-// Our own writes come back as label events, so recent labels identify them.
 export function isEcho(own, label) {
   return Boolean(own) && (own.written === label || own.recent.includes(label))
 }

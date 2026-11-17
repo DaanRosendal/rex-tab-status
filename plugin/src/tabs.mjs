@@ -132,7 +132,6 @@ export class Tabs {
     this.schedule(key, session, win.window_id, view, now)
   }
 
-  // A finished or failed agent shows its result until the sleep delay passes.
   schedule(key, session, window, view, now) {
     this.cancel(key)
     if (view.sleeping || view.wakeAt === undefined) return

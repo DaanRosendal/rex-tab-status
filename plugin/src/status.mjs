@@ -1,7 +1,6 @@
 export const SLEEP_MS = 5 * 60 * 1000
 export const DEFAULT_APPS = ['claude-code', 'codex']
 
-// Higher wins. Auth ranks below blocked because the agent cannot run until the person acts.
 const RANK = { none: 0, idle: 1, done: 2, error: 3, working: 4, auth: 5, blocked: 6 }
 const ICON_KEY = {
   working: 'working',
@@ -82,8 +81,6 @@ export function reduceWindow(blocks, now, sleepMs = SLEEP_MS) {
   return { state, hasAgent, sleeping, wakeAt, iconKey }
 }
 
-// The title comes from the focused pane when it runs an agent, so the label does not change when
-// a different pane's state wins.
 export function pickTitleSource(blocks, focusedId) {
   const agents = blocks.filter(block => block.hasAgent)
   return agents.find(block => block.id === focusedId) ?? agents[0]
