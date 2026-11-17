@@ -12,8 +12,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test tests/themes.test.mjs tests/status.test.mjs tests/label.test.mjs tests/tabs.test.mjs tests/lock.test.mjs tests/watcher.test.mjs tests/manifest.test.mjs",
-    "test:integration": "node --test tests/rex-integration.test.mjs",
+    "test": "node --test 'tests/*.test.mjs'",
+    "test:integration": "node --test tests/integration/rex.test.mjs",
     "validate": "claude plugin validate plugin && claude plugin validate .",
     "format": "npx --yes prettier@3 --write .",
     "format:check": "npx --yes prettier@3 --check ."

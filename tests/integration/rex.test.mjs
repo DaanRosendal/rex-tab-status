@@ -11,8 +11,8 @@ import { promisify } from 'node:util'
 const exec = promisify(execFile)
 const skip =
   spawnSync('rex', ['--help'], { stdio: 'ignore' }).status === 0 ? false : 'rex is not installed'
-const plugin = fileURLToPath(new URL('../plugin/src/watcher.mjs', import.meta.url))
-const fixture = fileURLToPath(new URL('./fixtures/agent-terminal.mjs', import.meta.url))
+const plugin = fileURLToPath(new URL('../../plugin/src/watcher.mjs', import.meta.url))
+const fixture = fileURLToPath(new URL('../fixtures/agent-terminal.mjs', import.meta.url))
 
 const TEST_TIMEOUT_MS = 45000
 const EVENTUALLY_TIMEOUT_MS = 8000
