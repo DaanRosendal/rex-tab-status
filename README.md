@@ -65,7 +65,7 @@ The theme is one of the table columns. Agents are matched by the `app` name they
 pkill -f 'rex-tab-status.*watcher.mjs watch'
 ```
 
-This restores your tab labels, and the next session starts the watcher again. Run it once after upgrading from 0.x. To uninstall, remove the plugin with `claude plugin uninstall rex-tab-status`, `codex plugin remove rex-tab-status@rex-tab-status`, `pi remove git:github.com/DaanRosendal/rex-tab-status` or `opencode plugin remove rex-tab-status`, then run the command above.
+This restores your tab labels, and the next session starts the watcher again. Run it once after upgrading from 0.x. To uninstall, remove the plugin with `claude plugin uninstall rex-tab-status`, `codex plugin remove rex-tab-status@rex-tab-status`, `pi remove git:github.com/DaanRosendal/rex-tab-status` or `opencode plugin remove github:DaanRosendal/rex-tab-status`, then run the command above.
 
 ## Troubleshooting
 
