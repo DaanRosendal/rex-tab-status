@@ -89,3 +89,20 @@ test('the README documents every icon and every setting the code reads', async (
   for (const variable of variables)
     assert.match(readme, new RegExp(`${variable}(?![A-Z_])`), `README is missing ${variable}`)
 })
+
+test('the Pi extension starts the watcher when a session starts', async () => {
+  const { pi: manifest } = await read('package.json')
+  assert.deepEqual(manifest.extensions, ['./pi/extension.mjs'])
+  const { default: extension } = await import('../pi/extension.mjs')
+  const handlers = {}
+  const calls = []
+  extension({
+    on: (event, handler) => (handlers[event] = handler),
+    exec: async (...args) => calls.push(args),
+  })
+  await handlers.session_start()
+  const [[command, args]] = calls
+  assert.equal(command, process.execPath)
+  assert.equal(args[0], join(root, 'plugin/src/watcher.mjs'))
+  assert.equal(args[1], 'start')
+})

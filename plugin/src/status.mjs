@@ -1,5 +1,5 @@
 export const SLEEP_MS = 5 * 60 * 1000
-export const DEFAULT_APPS = ['claude-code', 'codex']
+export const DEFAULT_APPS = ['claude-code', 'codex', 'pi', 'opencode']
 
 const RANK = { none: 0, idle: 1, done: 2, error: 3, working: 4, auth: 5, blocked: 6 }
 const ICON_KEY = {

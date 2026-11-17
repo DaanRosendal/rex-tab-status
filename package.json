@@ -8,6 +8,11 @@
   },
   "private": true,
   "type": "module",
+  "pi": {
+    "extensions": [
+      "./pi/extension.mjs"
+    ]
+  },
   "engines": {
     "node": ">=22"
   },
