@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.0] - 2026-11-27
+
+### Added
+
+- Add `REX_TAB_STATUS_WATCH`, a pattern for background tasks that mean the agent is waiting. A finished Claude Code tab with a matching task still running shows 📡 and never falls asleep ([`30ef7e5`](https://github.com/DaanRosendal/rex-tab-status/commit/30ef7e5))
+
 ## [1.2.0] - 2026-11-18
 
 ### Changed
