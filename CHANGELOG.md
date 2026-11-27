@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.1] - 2026-11-27
+
+### Fixed
+
+- Show 📡 when Claude Code keeps reporting a finished turn as working because a matching background task is still running ([`47779a5`](https://github.com/DaanRosendal/rex-tab-status/commit/47779a5))
+
 ## [1.3.0] - 2026-11-27
 
 ### Added
