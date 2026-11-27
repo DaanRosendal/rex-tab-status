@@ -39,6 +39,14 @@ A plugin for Claude Code and Codex that prefixes the Rex tab label with a state 
 - No em dashes and no semicolons in prose, comments, the changelog or release notes.
 - Keep changelog entries and commit messages short.
 
+## Public content
+
+This repo is public. Everything committed here, including tests, fixtures, examples, the changelog and commit messages, must be safe for anyone to read.
+
+- Never commit customer data, employer or internal names, internal paths, hostnames, ticket or merge request numbers, credentials, or configuration copied from a private setup.
+- When a change starts from a private use case, rewrite its examples and fixtures with generic placeholders such as `./scripts/watch-pr.sh` or `example.com`. Keep the private values in local settings.
+- Before committing, read the staged diff for anything that only makes sense inside one organization.
+
 ## Commits
 
 - Commits follow Conventional Commits (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`, `chore:`, with an optional scope). The subject is imperative and short, such as `feat: add icon themes`. One logical change per commit.
