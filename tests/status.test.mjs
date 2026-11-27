@@ -193,6 +193,21 @@ test('a finished root with a matching background task is watching', () => {
   assert.equal(shown([rec('idle'), watcher()], { proc, watch }), 'watching')
 })
 
+test('a root still running background shells after its turn counts as finished', () => {
+  const after = rec('working', { msg: '1 shell still running' })
+  assert.equal(shown([after, watcher()], { proc, watch }), 'watching')
+  assert.equal(
+    shown([rec('working', { msg: '2 shells still running' }), watcher()], { proc, watch }),
+    'watching',
+  )
+  assert.equal(shown([after, watcher({ title: 'npm test' })], { proc, watch }), 'working')
+  assert.equal(shown([after, watcher()]), 'working')
+  assert.equal(
+    shown([rec('working', { msg: 'Reading files' }), watcher()], { proc, watch }),
+    'working',
+  )
+})
+
 test('without a pattern or a match the background task counts as working', () => {
   assert.equal(shown([rec('done'), watcher()]), 'working')
   assert.equal(shown([rec('done'), watcher({ title: 'npm test' })], { proc, watch }), 'working')

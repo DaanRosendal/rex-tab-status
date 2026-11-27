@@ -10,6 +10,7 @@ export function sleepMsFrom(text) {
 }
 
 // A watching agent outranks done so it never sleeps, and an error still shows over it.
+const STILL_RUNNING = /^\d+ \w+ still running$/
 const RANK = { none: 0, idle: 1, done: 2, watching: 3, error: 4, working: 5, auth: 6, blocked: 7 }
 const ICON_KEY = {
   working: 'working',
@@ -62,7 +63,9 @@ export function watchPatternFrom(text) {
 
 // A record without an id is the program's own. Records with an id belong to its subagents, whose
 // finished states go stale, so only their active states count. A working child whose title matches
-// `watch` is a background wait, such as a watcher script, and shows as watching.
+// `watch` is a background wait, such as a watcher script, and shows as watching. Claude Code
+// keeps its own record working while background shells run after the turn ends, so that record
+// counts as done and a working child that isn't a watch still shows as working.
 export function reduceBlock(records, { proc, apps = DEFAULT_APPS, watch } = {}) {
   const live = liveOwners(proc)
   let state = 'none'
@@ -75,6 +78,8 @@ export function reduceBlock(records, { proc, apps = DEFAULT_APPS, watch } = {}) 
     if (!shown) continue
     hasAgent = true
     if (isChild && shown === 'working' && watch?.test(record.title ?? '')) shown = 'watching'
+    if (!isChild && shown === 'working' && watch && STILL_RUNNING.test(record.msg ?? ''))
+      shown = 'done'
     if (isChild && !['working', 'watching', 'blocked', 'auth'].includes(shown)) continue
     if (RANK[shown] > RANK[state]) state = shown
     const at = Date.parse(record.updated_at)
