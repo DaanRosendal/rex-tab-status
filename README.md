@@ -9,6 +9,7 @@ Shows what your coding agent is doing in its [Rex](https://www.superlogical.com/
 | done                                         | ✅        | `[ok]`  | ✓         | 🟢        |
 | failed, or needs new credentials             | ❌        | `[x]`   | ✗         | ⛔        |
 | finished or failed a while ago               | 💤        | `[zz]`  | ○         | ⚪        |
+| done, waiting on a watched background task   | 📡        | `[~]`   | ◎         | 🔵        |
 
 A tab then reads like `⏳ Fix login redirect`. The name comes from the agent's terminal title, unless you renamed the tab. Then it keeps your name and only the emoji changes. Rex already marks unfocused tabs with a spinner, and this puts the state in the label itself.
 
@@ -55,10 +56,11 @@ Put these in your shell profile, then stop the watcher once so it picks them up.
 export REX_TAB_STATUS_THEME=ascii              # tabs read [..] Fix login redirect
 export REX_TAB_STATUS_APPS=claude-code,codex,pi   # which agents to follow (* adds every program that reports, not just agents)
 export REX_TAB_STATUS_SLEEP_MINUTES=30         # minutes until a finished tab shows 💤, 0 never
+export REX_TAB_STATUS_WATCH='watch\.sh'        # background tasks that mean the agent is waiting, shown as 📡
 export REX_TAB_STATUS=off                      # turn it off
 ```
 
-The theme is one of the table columns. By default a tab falls asleep fifteen minutes after its agent finished or failed, and `0` keeps the result forever. Agents are matched by the `app` name they report to Rex. By default it follows `claude-code`, `codex`, `pi` and `opencode`.
+The theme is one of the table columns. By default a tab falls asleep fifteen minutes after its agent finished or failed, and `0` keeps the result forever. `REX_TAB_STATUS_WATCH` is a regular expression matched against the command of each background task. When the agent has finished its turn and a matching task still runs, the tab shows 📡 instead of ⏳ and never falls asleep. It is off by default, and it needs Claude Code, since other agents don't report their background tasks to Rex. Agents are matched by the `app` name they report to Rex. By default it follows `claude-code`, `codex`, `pi` and `opencode`.
 
 ## Stop or uninstall
 

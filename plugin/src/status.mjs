@@ -9,9 +9,11 @@ export function sleepMsFrom(text) {
   return minutes === 0 ? Infinity : minutes * 60 * 1000
 }
 
-const RANK = { none: 0, idle: 1, done: 2, error: 3, working: 4, auth: 5, blocked: 6 }
+// A watching agent outranks done so it never sleeps, and an error still shows over it.
+const RANK = { none: 0, idle: 1, done: 2, watching: 3, error: 4, working: 5, auth: 6, blocked: 7 }
 const ICON_KEY = {
   working: 'working',
+  watching: 'watching',
   blocked: 'blocked',
   auth: 'error',
   error: 'error',
@@ -48,20 +50,32 @@ function isAllowed(record, apps) {
   return apps.includes('*') || apps.includes(record.effective_app ?? record.app)
 }
 
+// A pattern as text, or undefined when it is empty or not a valid regular expression.
+export function watchPatternFrom(text) {
+  if (text === undefined || String(text).trim() === '') return undefined
+  try {
+    return new RegExp(String(text).trim())
+  } catch {
+    return undefined
+  }
+}
+
 // A record without an id is the program's own. Records with an id belong to its subagents, whose
-// finished states go stale, so only their active states count.
-export function reduceBlock(records, { proc, apps = DEFAULT_APPS } = {}) {
+// finished states go stale, so only their active states count. A working child whose title matches
+// `watch` is a background wait, such as a watcher script, and shows as watching.
+export function reduceBlock(records, { proc, apps = DEFAULT_APPS, watch } = {}) {
   const live = liveOwners(proc)
   let state = 'none'
   let hasAgent = false
   let restAt
   for (const record of records) {
     if (!isAllowed(record, apps) || !isLive(record.owner, live)) continue
-    const shown = shownOf(record)
+    const isChild = Boolean(record.id)
+    let shown = shownOf(record)
     if (!shown) continue
     hasAgent = true
-    const isChild = Boolean(record.id)
-    if (isChild && !['working', 'blocked', 'auth'].includes(shown)) continue
+    if (isChild && shown === 'working' && watch?.test(record.title ?? '')) shown = 'watching'
+    if (isChild && !['working', 'watching', 'blocked', 'auth'].includes(shown)) continue
     if (RANK[shown] > RANK[state]) state = shown
     const at = Date.parse(record.updated_at)
     if (!isChild && (shown === 'done' || shown === 'error') && Number.isFinite(at))

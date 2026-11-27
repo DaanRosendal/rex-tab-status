@@ -30,6 +30,7 @@ export class Tabs {
     icons = resolveTheme(undefined),
     apps = DEFAULT_APPS,
     sleepMs = SLEEP_MS,
+    watch,
     now = Date.now,
     setTimer = setTimeout,
     clearTimer = clearTimeout,
@@ -38,6 +39,7 @@ export class Tabs {
     this.icons = icons
     this.apps = apps
     this.sleepMs = sleepMs
+    this.watch = watch
     this.now = now
     this.setTimer = setTimer
     this.clearTimer = clearTimer
@@ -74,7 +76,11 @@ export class Tabs {
     // Without both reads a finished agent could look gone or a gone agent finished.
     if (statusText === undefined || processText === undefined) return undefined
     const proc = parse(processText)
-    const reduced = reduceBlock(parse(statusText)?.records ?? [], { proc, apps: this.apps })
+    const reduced = reduceBlock(parse(statusText)?.records ?? [], {
+      proc,
+      apps: this.apps,
+      watch: this.watch,
+    })
     const terminalTitle = parse(titleText)
     const text = typeof terminalTitle?.title === 'string' ? terminalTitle.title : ''
     const title = isLive(terminalTitle?.owner, liveOwners(proc)) ? cleanTitle(text) : ''

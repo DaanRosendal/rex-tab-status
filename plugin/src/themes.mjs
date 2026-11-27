@@ -1,9 +1,30 @@
 // Never remove an icon from a preset: tabs already showing it could no longer be cleaned.
 export const THEMES = {
-  default: { working: '⏳', blocked: '❓', done: '✅', error: '❌', sleeping: '💤' },
-  ascii: { working: '[..]', blocked: '[?]', done: '[ok]', error: '[x]', sleeping: '[zz]' },
-  minimal: { working: '◐', blocked: '◆', done: '✓', error: '✗', sleeping: '○' },
-  circles: { working: '🟡', blocked: '🔴', done: '🟢', error: '⛔', sleeping: '⚪' },
+  default: {
+    working: '⏳',
+    blocked: '❓',
+    done: '✅',
+    error: '❌',
+    sleeping: '💤',
+    watching: '📡',
+  },
+  ascii: {
+    working: '[..]',
+    blocked: '[?]',
+    done: '[ok]',
+    error: '[x]',
+    sleeping: '[zz]',
+    watching: '[~]',
+  },
+  minimal: { working: '◐', blocked: '◆', done: '✓', error: '✗', sleeping: '○', watching: '◎' },
+  circles: {
+    working: '🟡',
+    blocked: '🔴',
+    done: '🟢',
+    error: '⛔',
+    sleeping: '⚪',
+    watching: '🔵',
+  },
 }
 
 export function resolveTheme(name) {

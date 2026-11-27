@@ -6,6 +6,7 @@ import {
   reduceBlock,
   reduceWindow,
   sleepMsFrom,
+  watchPatternFrom,
 } from '../plugin/src/status.mjs'
 import { THEMES } from '../plugin/src/themes.mjs'
 
@@ -145,14 +146,21 @@ test('the title comes from the focused agent pane, then the first one', () => {
 
 test('every icon key a window can show exists in every theme', () => {
   const shown = new Set()
-  for (const state of ['none', 'idle', 'working', 'blocked', 'auth', 'error', 'done']) {
+  for (const state of ['none', 'idle', 'working', 'watching', 'blocked', 'auth', 'error', 'done']) {
     const resting = state === 'done' || state === 'error' ? { restAt: 0 } : {}
     for (const now of [1, SLEEP_MS + 1]) {
       const { iconKey } = reduceWindow([block(state, resting)], now)
       if (iconKey) shown.add(iconKey)
     }
   }
-  assert.deepEqual([...shown].sort(), ['blocked', 'done', 'error', 'sleeping', 'working'])
+  assert.deepEqual([...shown].sort(), [
+    'blocked',
+    'done',
+    'error',
+    'sleeping',
+    'watching',
+    'working',
+  ])
   for (const icons of Object.values(THEMES)) for (const key of shown) assert.ok(icons[key], key)
 })
 
@@ -170,4 +178,52 @@ test('a window falls asleep after the delay it is given, or never', () => {
   assert.equal(reduceWindow(blocks, 1000, 1000).iconKey, 'sleeping')
   const forever = reduceWindow(blocks, 10 ** 15, Infinity)
   assert.deepEqual([forever.sleeping, forever.wakeAt, forever.iconKey], [false, undefined, 'done'])
+})
+
+const watch = /watch-pr\.sh/
+const watcher = (extra = {}) =>
+  rec('working', {
+    id: 'b1',
+    title: 'cd /repo && ./scripts/watch-pr.sh 42',
+    ...extra,
+  })
+
+test('a finished root with a matching background task is watching', () => {
+  assert.equal(shown([rec('done'), watcher()], { proc, watch }), 'watching')
+  assert.equal(shown([rec('idle'), watcher()], { proc, watch }), 'watching')
+})
+
+test('without a pattern or a match the background task counts as working', () => {
+  assert.equal(shown([rec('done'), watcher()]), 'working')
+  assert.equal(shown([rec('done'), watcher({ title: 'npm test' })], { proc, watch }), 'working')
+  assert.equal(shown([rec('done'), watcher({ title: undefined })], { proc, watch }), 'working')
+})
+
+test('real work, a question and an error all show over watching', () => {
+  assert.equal(shown([rec('working'), watcher()], { proc, watch }), 'working')
+  assert.equal(
+    shown([rec('done'), watcher(), rec('working', { id: 'a1' })], { proc, watch }),
+    'working',
+  )
+  assert.equal(shown([rec('blocked', { kind: 'question' }), watcher()], { proc, watch }), 'blocked')
+  assert.equal(shown([rec('error'), watcher()], { proc, watch }), 'error')
+})
+
+test('the root record is never watching, even when its title matches', () => {
+  assert.equal(
+    shown([rec('working', { title: './scripts/watch-pr.sh' })], { proc, watch }),
+    'working',
+  )
+})
+
+test('a watching window never sleeps', () => {
+  const view = reduceWindow([block('watching')], 10 * SLEEP_MS)
+  assert.deepEqual([view.iconKey, view.sleeping, view.wakeAt], ['watching', false, undefined])
+  assert.equal(reduceWindow([block('watching'), block('working')], 1).iconKey, 'working')
+})
+
+test('the watch pattern is a regular expression, and empty or invalid text turns it off', () => {
+  assert.equal(watchPatternFrom(' watch-pr ').test('./scripts/watch-pr.sh 42'), true)
+  for (const bad of [undefined, '', '  ', '('])
+    assert.equal(watchPatternFrom(bad), undefined, String(bad))
 })
